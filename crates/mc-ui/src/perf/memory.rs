@@ -323,23 +323,9 @@ impl DevicePage for MemoryPage {
         l.unprivileged_hardware.clear();
         if self.darwin_accounting && mc_core::apple_specs::is_base_m5(&readings.cpu) {
             for (label, value) in [
-                (
-                    "Memory technology (reference):",
-                    "LPDDR5X (Wikipedia; not module detection)",
-                ),
-                (
-                    "Memory data rate (reference):",
-                    "9600 MT/s (Wikipedia; not a live clock)",
-                ),
-                (
-                    "Memory bandwidth (reference):",
-                    "153 GB/s (Apple; theoretical, not measured throughput)",
-                ),
-                (
-                    "Memory specification source:",
-                    mc_core::apple_specs::WIKIPEDIA_M5_SOURCE,
-                ),
-                ("Bandwidth source:", mc_core::apple_specs::APPLE_M5_SOURCE),
+                ("Type:", "LPDDR5X"),
+                ("Speed:", "9600 MT/s"),
+                ("Memory bandwidth:", "153 GB/s"),
             ] {
                 let row = (i18n(label), value.into());
                 l.hardware.push(row.clone());
@@ -599,7 +585,7 @@ impl DevicePage for MemoryPage {
         if self.darwin_accounting {
             info.clear();
         }
-        if self.devices_failed {
+        if self.devices_failed && !self.darwin_accounting {
             info.push((
                 i18n("Getting additional memory information failed"),
                 String::new(),
@@ -721,8 +707,9 @@ mod tests {
         assert!(text.contains("LPDDR5X"));
         assert!(text.contains("9600 MT/s"));
         assert!(text.contains("153 GB/s"));
-        assert!(text.contains("reference"));
-        assert!(text.contains("not a live clock"));
+        for unwanted in ["http", "Wikipedia", "reference", "not a live clock"] {
+            assert!(!text.contains(unwanted));
+        }
         assert_eq!(page.speed, "Unknown");
         assert!(readings.mem_devices.is_empty());
         assert_eq!(readings.mem_info.mclk_mhz, None);

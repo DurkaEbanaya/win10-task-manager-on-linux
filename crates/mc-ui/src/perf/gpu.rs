@@ -696,12 +696,8 @@ impl DevicePage for GpuPage {
             && device.driver.integrated == Some(true)
         {
             self.info.push((
-                i18n("Media Engine (reference):"),
-                "H.264 / HEVC / ProRes / ProRes RAW; AV1 decode (not activity telemetry)".into(),
-            ));
-            self.info.push((
-                i18n("Media specification source:"),
-                mc_core::apple_specs::APPLE_M5_SOURCE.into(),
+                i18n("Media Engine:"),
+                "H.264, HEVC, ProRes, ProRes RAW; AV1 decode".into(),
             ));
         }
         true
@@ -979,10 +975,7 @@ mod tests {
         let device = snapshot.devices.get_mut("test-adapter").unwrap();
         device.driver.integrated = Some(true);
         feed(&mut page, &config, &readings, &snapshot);
-        assert!(
-            page.data_summary()
-                .contains("AV1 decode (not activity telemetry)")
-        );
+        assert!(page.data_summary().contains("AV1 decode"));
         snapshot
             .devices
             .get_mut("test-adapter")
@@ -990,7 +983,7 @@ mod tests {
             .driver
             .integrated = Some(false);
         feed(&mut page, &config, &readings, &snapshot);
-        assert!(!page.data_summary().contains("Media Engine (reference)"));
+        assert!(!page.data_summary().contains("Media Engine:"));
     }
 
     #[test]

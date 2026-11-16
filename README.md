@@ -190,11 +190,11 @@ be unavailable; raw labels are not guessed CPU/GPU hotspot assignments. IOReport
 clocks are active-residency averages, not instantaneous or nominal clock speeds.
 No privileged `powermetrics`, kext or sensor-control helper is installed.
 
-An offline, exact-model M5 reference catalog supplements the live readings with
-LPDDR5X-9600 specifications, Apple's 153 GB/s theoretical bandwidth, Neural Engine
-and media-codec capabilities, plus a secondary-source up-to CPU frequency. All are
-labeled **reference**, carry source links and never become measured clocks or
-throughput. Conflicting NPU TOPS claims are explicitly unverified. See
+An offline, exact-model M5 catalog supplements the live readings with compact
+LPDDR5X-9600 specifications, 153 GB/s theoretical bandwidth, Neural Engine
+and media-codec capabilities. Sources and caveats are kept in documentation,
+not added as interface rows. These values never become measured clocks or
+throughput. Conflicting TOPS and frequency claims are not displayed. See
 [reference provenance and kernel-extension constraints](docs/hardware-monitoring.md#apple-m5-reference-specifications-not-telemetry).
 
 `--synthetic 300` remains a demo, not measurements of your Mac. Details and measured

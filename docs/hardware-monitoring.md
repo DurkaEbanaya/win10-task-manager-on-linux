@@ -7,8 +7,9 @@ window sizes. Left-click copies the complete value, including text shortened on 
 
 ## Apple M5 reference specifications (not telemetry)
 
-The macOS CPU, Memory and GPU pages also show explicitly labeled **reference**
-metadata. This small offline catalog matches only the exact native `Apple M5`
+The macOS CPU, Memory and GPU pages show compact specification values, without
+source URLs, editorial caveats or extra windows. Provenance belongs here, not in
+the display. This small offline catalog matches only the exact native `Apple M5`
 identity with a known non-guest flag; Pro/Max/Ultra, unknown identities and VMs do
 not inherit its values. No network requests occur during sampling or UI drawing.
 Native detected memory modules, clocks, capacities and graphs are not overwritten.
@@ -26,8 +27,27 @@ Reviewed 2026-11-16:
 
 This deliberately does not infer L3 from an SLC estimate, copy another M5 variant's
 GPU/core configuration, or present a catalog figure as a physical measurement.
-URLs are shown with the reference metadata and preserved by Copy. Facts only are
-recorded, not Wikipedia/Apple prose or images.
+The conflicting TOPS claim and secondary up-to frequency are not displayed.
+Neither an unverified base frequency nor an SLC size is substituted for a native
+value. Facts only are recorded, not Wikipedia/Apple prose or images.
+
+### Handles investigation
+
+Windows Handles is an object-manager handle-table count, not a Unix open-file
+object count. `kern.num_files` is therefore not a replacement and the Open Files
+row has been removed from the macOS UI.
+
+On the physical M5, `mach_port_space_basic_info` can return occupied Mach IPC
+table entries (`iisb_table_inuse`) using a task-inspect port. This counts Mach
+names, including dead names and port sets, not Windows object handles or Unix
+file descriptors. Unprivileged inspection on 2026-11-16 succeeded only for the
+probe itself: 1 readable task out of 796 positive PIDs; task-name ports could be
+obtained for 476 tasks but were insufficient for this query (return 16). A root
+probe was authorized in scope but the native administrator dialog returned
+authentication failure -60007; root visibility remains unverified. No persistent
+helper, sudoers change or security-policy change was made. Never present the
+accessible subset as a complete system Handles count. Any alternative metric
+name must be agreed with the user before adding it to the UI.
 
 ### Kernel extensions versus a privileged collector
 

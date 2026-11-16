@@ -380,33 +380,9 @@ impl DevicePage for CpuPage {
         l.hardware.clear();
         l.unprivileged_hardware.clear();
         if mc_core::apple_specs::is_base_m5(cpu) {
-            for (label, value) in [
-                (
-                    "CPU frequency (reference, up to):",
-                    "4.61 GHz (not base clock; CPU-Monkey)",
-                ),
-                (
-                    "Neural Engine (reference):",
-                    "16 cores (Apple); 42 TOPS reported by Wikipedia, unverified",
-                ),
-                (
-                    "Media Engine (reference):",
-                    "H.264 / HEVC / ProRes / ProRes RAW; AV1 decode (Apple)",
-                ),
-                (
-                    "Chip specification source:",
-                    mc_core::apple_specs::APPLE_M5_SOURCE,
-                ),
-                ("CPU frequency source:", mc_core::apple_specs::CLOCK_SOURCE),
-                (
-                    "NPU rating source:",
-                    mc_core::apple_specs::WIKIPEDIA_M5_SOURCE,
-                ),
-            ] {
-                let row = (i18n(label), value.into());
-                l.hardware.push(row.clone());
-                l.unprivileged_hardware.push(row);
-            }
+            let row = (i18n("Neural Engine:"), i18n("16 cores"));
+            l.hardware.push(row.clone());
+            l.unprivileged_hardware.push(row);
         }
         if self.darwin_cpu && !cpu.performance_levels.is_empty() {
             let row = (
@@ -681,6 +657,13 @@ impl DevicePage for CpuPage {
         if let Some(power) = &l.power_draw {
             third.push((i18n("Power Draw"), power.clone()));
         }
+        let mut counts = vec![
+            (i18n("Processes"), l.processes.clone()),
+            (i18n("Threads"), l.threads.clone()),
+        ];
+        if !self.darwin_cpu {
+            counts.push((i18n("Handles"), l.handles.clone()));
+        }
         let stats = vec![
             vec![
                 (i18n("Utilization"), l.utilization.clone()),
@@ -693,18 +676,7 @@ impl DevicePage for CpuPage {
                     l.speed.clone(),
                 ),
             ],
-            vec![
-                (i18n("Processes"), l.processes.clone()),
-                (i18n("Threads"), l.threads.clone()),
-                (
-                    i18n(if self.darwin_cpu {
-                        "Open files"
-                    } else {
-                        "Handles"
-                    }),
-                    l.handles.clone(),
-                ),
-            ],
+            counts,
             third,
         ];
         let mut info = vec![
@@ -853,7 +825,7 @@ impl DevicePage for CpuPage {
     {}:       {}
     Processes:   {}
     Threads:     {}
-    {}:     {}
+{}
     Up time:     {}
     Temperature: {}"#,
             self.cpu_name,
@@ -878,11 +850,10 @@ impl DevicePage for CpuPage {
             l.processes,
             l.threads,
             if self.darwin_cpu {
-                "Open files"
+                String::new()
             } else {
-                "Handles"
+                format!("    Handles:     {}", l.handles)
             },
-            l.handles,
             l.uptime,
             o(&l.temperature),
         );
@@ -910,10 +881,17 @@ mod tests {
         assert_eq!(page.labels.speed, "—");
         assert_eq!(page.base_speed, "Not reported by macOS");
         let text = page.data_summary();
-        assert!(text.contains("4.61 GHz (not base clock; CPU-Monkey)"));
-        assert!(text.contains("16 cores (Apple)"));
-        assert!(text.contains("unverified"));
-        assert!(text.contains(mc_core::apple_specs::APPLE_M5_SOURCE));
+        assert!(text.contains("Neural Engine: 16 cores"));
+        for unwanted in [
+            "http",
+            "Wikipedia",
+            "CPU-Monkey",
+            "(reference",
+            "unverified",
+            "Open files",
+        ] {
+            assert!(!text.contains(unwanted));
+        }
         readings.cpu.name = Some("Apple M5 Pro".into());
         page.update(&readings, &UpdateEnv::new(&config));
         assert!(!page.data_summary().contains("4.61 GHz"));
@@ -949,7 +927,7 @@ mod tests {
         assert_eq!(page.sockets, "1");
         assert_eq!(page.virt_machine, "No");
         let view = page.win10_view(&config);
-        assert!(view.stats[1].contains(&("Open files".into(), "6507".into())));
+        assert!(!view.stats[1].iter().any(|(label, _)| label == "Open files"));
         assert!(!view.stats[1].iter().any(|(label, _)| label == "Handles"));
         assert!(
             view.stats[0]

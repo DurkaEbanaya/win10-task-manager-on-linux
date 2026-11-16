@@ -4,11 +4,6 @@
 //! Offline reference facts, never measurements or replacements for native counters.
 //! Reviewed 2026-11-16; sources and limitations in docs/hardware-monitoring.md.
 
-pub const APPLE_M5_SOURCE: &str = "https://www.apple.com/macbook-air/specs/";
-pub const WIKIPEDIA_M5_SOURCE: &str =
-    "https://en.wikipedia.org/w/index.php?title=Apple_M5&oldid=1384649600";
-pub const CLOCK_SOURCE: &str = "https://www.cpu-monkey.com/en/cpu-apple_m5_10_cpu";
-
 /// Exact identity only. Never apply base-M5 facts to Pro/Max/Ultra, a VM, or a
 /// similarly named GPU. Native values stay separate and retain precedence.
 pub fn is_base_m5(cpu: &mc_magpie::magpie_types::cpu::Cpu) -> bool {
