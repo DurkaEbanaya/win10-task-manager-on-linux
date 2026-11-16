@@ -26,6 +26,7 @@ use rayon::ThreadPool;
 
 pub type Cpu = types::cpu::Cpu;
 pub type LogicalCpu = types::cpu::LogicalCpu;
+pub type PerformanceLevel = types::cpu::PerformanceLevel;
 
 pub type CpuResponseKind = types::cpu::cpu_response::Response;
 pub type CpuRequest = types::cpu::CpuRequest;

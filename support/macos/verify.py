@@ -24,6 +24,10 @@ with tempfile.TemporaryDirectory(prefix="macos-smoke-", dir=private) as director
     assert data["cpu"]["usage_valid"] is True
     assert 0 <= data["cpu"]["total_usage_percent"] <= 100
     assert data["cpu"]["core_usage_percent"]
+    assert data["cpu"]["physical_core_count"] > 0
+    for level in data["cpu"]["performance_levels"]:
+        assert level["physical_core_count"] > 0
+        assert 0 <= level["index"] < 16
     assert data["mem_info"]["sample_valid"] is True
     assert data["mem_info"]["mem_total"] > 0
     assert data["mem_info"]["darwin_accounting"] is True

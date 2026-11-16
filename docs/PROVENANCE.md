@@ -101,6 +101,15 @@ are preserved: dataset groups grow to accept additional series and retain series
 update supplies no point. The core has no GUI dependencies; `crates/mc-graph/` supplies egui
 rendering. The graph-widget GTK renderer and its submodule are no longer part of the active tree.
 
+## macOS follow-up research
+
+The independent `hw.perflevel*` topology/cache adapter was informed by
+[DurkaEbanaya/Aida128](https://github.com/DurkaEbanaya/Aida128/tree/c602d550bfaa504dbbc2940f6eac8436abce1bed)
+(MIT), specifically its documented runtime sysctl names. No benchmark kernels or
+estimated SoC catalog values are incorporated. The Intel-only
+[1700stats](https://github.com/DurkaEbanaya/1700stats/tree/2fc15bd3338ae3f34d358dae6d988ee6cd162622)
+was reviewed for applicability but no code or binaries were incorporated.
+
 ## Silver: original historical notice
 
 The removed `rust-gui-silver-bullet/` experiment served as a reference during the GUI port.

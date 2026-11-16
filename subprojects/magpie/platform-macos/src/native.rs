@@ -126,6 +126,27 @@ fn cchars(bytes: &[libc::c_char]) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
+fn performance_levels() -> Vec<PerformanceLevel> {
+    // Aida128 demonstrated these runtime sysctls. Keep aggregate groups separate
+    // from LogicalCpu: their order does not establish Mach processor ID affinity.
+    (0..16)
+        .filter_map(|index| {
+            let read_name =
+                |field| std::ffi::CString::new(format!("hw.perflevel{index}.{field}")).unwrap();
+            let physical = sysctl::<u32>(&read_name("physicalcpu")).filter(|v| *v > 0)?;
+            Some(PerformanceLevel {
+                index,
+                name: sysctl_string(&read_name("name")).filter(|v| !v.is_empty()),
+                physical_core_count: physical,
+                logical_cpu_count: sysctl::<u32>(&read_name("logicalcpu")).filter(|v| *v > 0),
+                l1_instruction_bytes: sysctl::<u64>(&read_name("l1icachesize")).filter(|v| *v > 0),
+                l1_data_bytes: sysctl::<u64>(&read_name("l1dcachesize")).filter(|v| *v > 0),
+                l2_bytes: sysctl::<u64>(&read_name("l2cachesize")).filter(|v| *v > 0),
+            })
+        })
+        .collect()
+}
+
 pub struct CpuCollector {
     data: Cpu,
     previous: Vec<[u32; 4]>,
@@ -146,6 +167,8 @@ impl CpuCache for CpuCollector {
                 process_count_valid: Some(false),
                 thread_count_valid: Some(false),
                 handle_count_valid: Some(false),
+                physical_core_count: sysctl::<u32>(c"hw.physicalcpu").filter(|v| *v > 0),
+                performance_levels: performance_levels(),
                 ..Default::default()
             },
             previous: vec![],
@@ -986,6 +1009,11 @@ mod tests {
         assert_eq!(cpu.cached().usage_valid, Some(true));
         assert!((0. ..=100.).contains(&cpu.cached().total_usage_percent));
         assert_eq!(cpu.cached().frequency_valid, Some(false));
+        assert!(cpu.cached().physical_core_count.is_some_and(|v| v > 0));
+        for group in &cpu.cached().performance_levels {
+            assert!(group.physical_core_count > 0);
+            assert!(group.index < 16);
+        }
         let mut memory = MemoryCollector::new();
         memory.refresh();
         assert_eq!(memory.memory().sample_valid, Some(true));

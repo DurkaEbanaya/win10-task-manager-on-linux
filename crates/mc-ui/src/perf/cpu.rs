@@ -409,13 +409,43 @@ impl DevicePage for CpuPage {
                 }
             }
         }
+        if let Some(count) = cpu.physical_core_count {
+            let row = (i18n("Cores:"), count.to_string());
+            l.unprivileged_hardware.push(row.clone());
+            l.hardware.push(row);
+        }
+        for level in &cpu.performance_levels {
+            let name = level
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("#{}", level.index));
+            let mut values = vec![level.physical_core_count.to_string()];
+            for (label, bytes) in [
+                ("L1I", level.l1_instruction_bytes),
+                ("L1D", level.l1_data_bytes),
+                ("L2", level.l2_bytes),
+            ] {
+                if let Some(bytes) = bytes {
+                    values.push(format!(
+                        "{label} {}",
+                        to_human_readable_nice(bytes as f32, &DataType::MemoryBytes)
+                    ));
+                }
+            }
+            let row = (
+                format!("{} {name}:", i18n("Core types:")),
+                values.join(" · "),
+            );
+            l.unprivileged_hardware.push(row.clone());
+            l.hardware.push(row);
+        }
         if !cpu.logical_cpus.is_empty() {
             let cores: std::collections::HashSet<_> = cpu
                 .logical_cpus
                 .iter()
                 .filter_map(|c| Some((c.package_id?, c.core_id?)))
                 .collect();
-            if !cores.is_empty() {
+            if !cores.is_empty() && cpu.physical_core_count.is_none() {
                 let row = (i18n("Cores:"), cores.len().to_string());
                 l.unprivileged_hardware.push(row.clone());
                 l.hardware.push(row);
@@ -767,6 +797,42 @@ mod tests {
         assert!(s.contains("    Virtual processors: 4\n"));
         assert_eq!(page.summary.info1, "Test CPU");
         assert!(page.summary.info2.starts_with("42% "));
+    }
+
+    #[test]
+    fn darwin_performance_groups_do_not_invent_processor_affinity_or_clocks() {
+        let mut readings = Readings::new();
+        readings.cpu.core_usage_percent = vec![0.; 10];
+        readings.cpu.physical_core_count = Some(10);
+        readings.cpu.frequency_valid = Some(false);
+        readings.cpu.performance_levels = vec![mc_magpie::magpie_types::cpu::PerformanceLevel {
+            index: 0,
+            name: Some("Performance".into()),
+            physical_core_count: 4,
+            logical_cpu_count: Some(4),
+            l1_instruction_bytes: Some(192 * 1024),
+            l1_data_bytes: Some(128 * 1024),
+            l2_bytes: Some(16 * 1024 * 1024),
+        }];
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(
+            page.labels
+                .hardware
+                .contains(&("Cores:".into(), "10".into()))
+        );
+        let (_, group) = page
+            .labels
+            .hardware
+            .iter()
+            .find(|(label, _)| label.contains("Performance"))
+            .unwrap();
+        assert!(group.starts_with("4 · L1I "));
+        assert!(group.contains("L1D ") && group.contains("L2 "));
+        assert_eq!(page.core_tooltips[0], "CPU 0");
+        assert!(page.topology.is_empty());
+        assert_eq!(page.labels.speed, "—");
     }
 
     #[test]

@@ -153,7 +153,8 @@ they explicitly select the mutually exclusive `diagnostic-profile` mode.
 ### Building - macOS Apple Silicon (experimental native port)
 
 The development branch includes a native, unprivileged macOS magpie backend:
-CPU load, Darwin memory accounting, readable processes and process termination,
+CPU load, kernel-reported core groups/cache sizes, Darwin memory accounting,
+readable processes and process termination,
 mounted volumes, physical disk throughput, interface counters, Apple GPU activity,
 battery charge and a read-only launchd inventory. It is experimental, not telemetry
 parity with Linux. Missing or denied measurements are shown as unavailable.
