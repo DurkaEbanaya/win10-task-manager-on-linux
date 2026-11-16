@@ -5,7 +5,48 @@ Task Manager uses available Linux telemetry without assuming that every CPU/GPU 
 reported. Extra Performance metadata remains accessible through **More details…** at narrow
 window sizes. Left-click copies the complete value, including text shortened on screen.
 
-## Implemented sources
+## Apple M5 reference specifications (not telemetry)
+
+The macOS CPU, Memory and GPU pages also show explicitly labeled **reference**
+metadata. This small offline catalog matches only the exact native `Apple M5`
+identity with a known non-guest flag; Pro/Max/Ultra, unknown identities and VMs do
+not inherit its values. No network requests occur during sampling or UI drawing.
+Native detected memory modules, clocks, capacities and graphs are not overwritten.
+
+Reviewed 2026-11-16:
+
+| Reference field | Value and provenance | Meaning / limitation |
+|---|---|---|
+| Memory technology / data rate | LPDDR5X, 9600 MT/s; [Wikipedia revision 1384649600](https://en.wikipedia.org/w/index.php?title=Apple_M5&oldid=1384649600), corroborated by [CPU-Monkey](https://www.cpu-monkey.com/en/cpu-apple_m5_10_cpu) | Chip specification, not module identification, configured speed or measured DRAM clock. MT/s is not MHz. |
+| Memory bandwidth | 153 GB/s; [Apple MacBook Air specifications](https://www.apple.com/macbook-air/specs/) and [M5 announcement](https://www.apple.com/newsroom/2025/10/apple-unleashes-m5-the-next-big-leap-in-ai-performance-for-apple-silicon/) | Apple's rounded theoretical bandwidth, not current traffic or benchmark throughput. Wikipedia lists 153.6 GB/s; retain Apple's own rounding. |
+| Neural Engine | 16 cores; Apple above | Capability, not NPU utilization or detected active cores. |
+| NPU rating | 42 TOPS, explicitly an unverified Wikipedia claim | Apple pages reviewed do not specify TOPS; CPU-Monkey currently says 60 TOPS. Precision/workload/sparsity are unspecified, so do not treat the claim as verified hardware telemetry or use it as a utilization denominator. |
+| Media Engine | Hardware H.264, HEVC, ProRes, ProRes RAW; AV1 decode; Apple above | AV1 decode does not imply AV1 encode. No decoder activity, engine occupancy or available VideoToolbox session is inferred. |
+| CPU frequency, up to | 4.61 GHz; CPU-Monkey above | Secondary-source reference maximum. The source's prose says **up to**; neither a base clock nor the current Mac's DVFS limit is established. Keep Base Speed unknown if not reported natively. |
+
+This deliberately does not infer L3 from an SLC estimate, copy another M5 variant's
+GPU/core configuration, or present a catalog figure as a physical measurement.
+URLs are shown with the reference metadata and preserved by Copy. Facts only are
+recorded, not Wikipedia/Apple prose or images.
+
+### Kernel extensions versus a privileged collector
+
+The default macOS backend already uses user-space Mach, libproc, IOReport, IOKit,
+IOHID and read-only AppleSMC interfaces. Static chip facts above need no kext.
+Reading [Stats](https://github.com/exelban/stats) and
+[VirtualSMC](https://github.com/acidanthera/VirtualSMC) did not establish a supported
+third-party monitoring kext for this M5/macOS 27 combination. VirtualSMC is an SMC
+emulator (with Lilu dependency), not evidence of an M5 telemetry driver.
+
+A privileged user-space helper, where necessary for a specific supported API, is
+different from installing kernel code. Per [Apple's kernel extension guidance](https://support.apple.com/guide/security/kernel-extensions-in-macos-sec8e454101b/web),
+Apple Silicon kext loading requires user approval, Reduced Security configured in
+Recovery and a restart. No extension was installed, SIP/boot policy changed, or
+privileged helper started as part of this reference-metadata change. A concrete
+compatible driver, its additional counters and rollback/security implications
+must be reviewed and explicitly approved before any installation.
+
+## Implemented Linux sources
 
 | Field | Source and availability |
 |---|---|

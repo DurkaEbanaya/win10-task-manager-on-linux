@@ -20,6 +20,7 @@
 
 //! GUI independent logic of Task Manager. Must never depend on egui/eframe or GTK.
 
+pub mod apple_specs;
 pub mod config;
 pub mod format;
 pub mod gpu;

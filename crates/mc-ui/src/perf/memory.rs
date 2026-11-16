@@ -321,6 +321,31 @@ impl DevicePage for MemoryPage {
         let l = &mut self.labels;
         l.hardware.clear();
         l.unprivileged_hardware.clear();
+        if self.darwin_accounting && mc_core::apple_specs::is_base_m5(&readings.cpu) {
+            for (label, value) in [
+                (
+                    "Memory technology (reference):",
+                    "LPDDR5X (Wikipedia; not module detection)",
+                ),
+                (
+                    "Memory data rate (reference):",
+                    "9600 MT/s (Wikipedia; not a live clock)",
+                ),
+                (
+                    "Memory bandwidth (reference):",
+                    "153 GB/s (Apple; theoretical, not measured throughput)",
+                ),
+                (
+                    "Memory specification source:",
+                    mc_core::apple_specs::WIKIPEDIA_M5_SOURCE,
+                ),
+                ("Bandwidth source:", mc_core::apple_specs::APPLE_M5_SOURCE),
+            ] {
+                let row = (i18n(label), value.into());
+                l.hardware.push(row.clone());
+                l.unprivileged_hardware.push(row);
+            }
+        }
         if self.darwin_accounting {
             let pressure = match mem.darwin_pressure_level {
                 Some(1) => i18n("Normal"),
@@ -634,7 +659,7 @@ impl DevicePage for MemoryPage {
         let l = &self.labels;
         let na = i18n("N/A");
         let o = |v: &Option<String>| v.clone().unwrap_or_else(|| na.clone());
-        format!(
+        let mut text = format!(
             r#"Memory
 
     {}
@@ -669,12 +694,43 @@ impl DevicePage for MemoryPage {
             self.slots_used,
             self.form_factor,
             self.ram_type,
-        )
+        );
+        for (label, value) in &l.hardware {
+            text.push_str(&format!("\n    {label} {value}"));
+        }
+        text
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn m5_memory_references_are_not_module_or_clock_readings() {
+        let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);
+        readings.cpu.name = Some("Apple M5".into());
+        readings.cpu.darwin_cpu = Some(true);
+        readings.cpu.is_virtual_machine = Some(false);
+        readings.mem_info.darwin_accounting = Some(true);
+        readings.mem_info.sample_valid = Some(true);
+        readings.mem_info.mclk_mhz = None;
+        readings.mem_devices.clear();
+        let config = Config::default();
+        let mut page = MemoryPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        let text = page.data_summary();
+        assert!(text.contains("LPDDR5X"));
+        assert!(text.contains("9600 MT/s"));
+        assert!(text.contains("153 GB/s"));
+        assert!(text.contains("reference"));
+        assert!(text.contains("not a live clock"));
+        assert_eq!(page.speed, "Unknown");
+        assert!(readings.mem_devices.is_empty());
+        assert_eq!(readings.mem_info.mclk_mhz, None);
+        readings.cpu.name = Some("Apple M5 Max".into());
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(!page.data_summary().contains("9600 MT/s"));
+    }
+
     #[test]
     fn native_pressure_states_are_not_a_guessed_percentage() {
         let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);

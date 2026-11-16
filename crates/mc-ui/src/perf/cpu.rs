@@ -379,6 +379,35 @@ impl DevicePage for CpuPage {
         let l = &mut self.labels;
         l.hardware.clear();
         l.unprivileged_hardware.clear();
+        if mc_core::apple_specs::is_base_m5(cpu) {
+            for (label, value) in [
+                (
+                    "CPU frequency (reference, up to):",
+                    "4.61 GHz (not base clock; CPU-Monkey)",
+                ),
+                (
+                    "Neural Engine (reference):",
+                    "16 cores (Apple); 42 TOPS reported by Wikipedia, unverified",
+                ),
+                (
+                    "Media Engine (reference):",
+                    "H.264 / HEVC / ProRes / ProRes RAW; AV1 decode (Apple)",
+                ),
+                (
+                    "Chip specification source:",
+                    mc_core::apple_specs::APPLE_M5_SOURCE,
+                ),
+                ("CPU frequency source:", mc_core::apple_specs::CLOCK_SOURCE),
+                (
+                    "NPU rating source:",
+                    mc_core::apple_specs::WIKIPEDIA_M5_SOURCE,
+                ),
+            ] {
+                let row = (i18n(label), value.into());
+                l.hardware.push(row.clone());
+                l.unprivileged_hardware.push(row);
+            }
+        }
         if self.darwin_cpu && !cpu.performance_levels.is_empty() {
             let row = (
                 i18n("Speed order:"),
@@ -803,7 +832,7 @@ impl DevicePage for CpuPage {
     fn data_summary(&self) -> String {
         let l = &self.labels;
         let o = |v: &Option<String>| v.clone().unwrap_or_default();
-        format!(
+        let mut text = format!(
             r#"CPU
 
     {}
@@ -821,10 +850,10 @@ impl DevicePage for CpuPage {
     Power preference:   {}
 
     Utilization: {}
-    Speed:       {}
+    {}:       {}
     Processes:   {}
     Threads:     {}
-    Handles:     {}
+    {}:     {}
     Up time:     {}
     Temperature: {}"#,
             self.cpu_name,
@@ -840,18 +869,56 @@ impl DevicePage for CpuPage {
             o(&l.cpufreq_governor),
             o(&l.power_preference),
             l.utilization,
+            if self.darwin_cpu {
+                "Speed (active avg.)"
+            } else {
+                "Speed"
+            },
             l.speed,
             l.processes,
             l.threads,
+            if self.darwin_cpu {
+                "Open files"
+            } else {
+                "Handles"
+            },
             l.handles,
             l.uptime,
             o(&l.temperature),
-        )
+        );
+        for (label, value) in &l.hardware {
+            text.push_str(&format!("\n    {label} {value}"));
+        }
+        text
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn m5_reference_metadata_never_becomes_base_or_live_clock() {
+        let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);
+        readings.cpu.name = Some("Apple M5".into());
+        readings.cpu.darwin_cpu = Some(true);
+        readings.cpu.is_virtual_machine = Some(false);
+        readings.cpu.base_freq_khz = None;
+        readings.cpu.frequency_valid = Some(false);
+        readings.cpu.performance_levels.clear();
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert_eq!(page.labels.speed, "—");
+        assert_eq!(page.base_speed, "Not reported by macOS");
+        let text = page.data_summary();
+        assert!(text.contains("4.61 GHz (not base clock; CPU-Monkey)"));
+        assert!(text.contains("16 cores (Apple)"));
+        assert!(text.contains("unverified"));
+        assert!(text.contains(mc_core::apple_specs::APPLE_M5_SOURCE));
+        readings.cpu.name = Some("Apple M5 Pro".into());
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(!page.data_summary().contains("4.61 GHz"));
+    }
+
     #[test]
     fn darwin_cpu_uses_native_semantics_without_fabricated_handles_or_base_clock() {
         let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);

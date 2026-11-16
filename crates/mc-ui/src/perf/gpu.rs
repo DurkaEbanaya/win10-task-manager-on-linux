@@ -691,6 +691,19 @@ impl DevicePage for GpuPage {
                 i18n(if integrated { "Yes" } else { "No" }),
             ));
         }
+        if mc_core::apple_specs::is_base_m5(&readings.cpu)
+            && gpu.device_name.as_deref() == Some("Apple M5")
+            && device.driver.integrated == Some(true)
+        {
+            self.info.push((
+                i18n("Media Engine (reference):"),
+                "H.264 / HEVC / ProRes / ProRes RAW; AV1 decode (not activity telemetry)".into(),
+            ));
+            self.info.push((
+                i18n("Media specification source:"),
+                mc_core::apple_specs::APPLE_M5_SOURCE.into(),
+            ));
+        }
         true
     }
 
@@ -954,6 +967,30 @@ mod tests {
     fn feed(page: &mut GpuPage, config: &Config, readings: &Readings, snapshot: &GpuSnapshot) {
         page.update_gpu(snapshot);
         assert!(page.update(readings, &UpdateEnv::new(config)));
+    }
+
+    #[test]
+    fn m5_media_reference_is_scoped_to_integrated_matching_device() {
+        let (mut page, config, mut readings, mut snapshot) = setup();
+        readings.cpu.name = Some("Apple M5".into());
+        readings.cpu.darwin_cpu = Some(true);
+        readings.cpu.is_virtual_machine = Some(false);
+        readings.gpus.values_mut().next().unwrap().device_name = Some("Apple M5".into());
+        let device = snapshot.devices.get_mut("test-adapter").unwrap();
+        device.driver.integrated = Some(true);
+        feed(&mut page, &config, &readings, &snapshot);
+        assert!(
+            page.data_summary()
+                .contains("AV1 decode (not activity telemetry)")
+        );
+        snapshot
+            .devices
+            .get_mut("test-adapter")
+            .unwrap()
+            .driver
+            .integrated = Some(false);
+        feed(&mut page, &config, &readings, &snapshot);
+        assert!(!page.data_summary().contains("Media Engine (reference)"));
     }
 
     #[test]
