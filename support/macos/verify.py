@@ -35,6 +35,10 @@ with tempfile.TemporaryDirectory(prefix="macos-smoke-", dir=private) as director
         assert 0 <= level["index"] < 16
         clock = level.get("active_frequency_mhz")
         assert clock is None or 0 < clock < 10000
+        minimum, maximum = level.get("minimum_frequency_mhz"), level.get("maximum_frequency_mhz")
+        assert (minimum is None and maximum is None) or (
+            minimum is not None and maximum is not None and 0 < minimum <= maximum < 10000
+        )
     assert data["mem_info"]["sample_valid"] is True
     assert data["mem_info"]["mem_total"] > 0
     assert data["mem_info"]["darwin_accounting"] is True

@@ -123,6 +123,7 @@ pub struct Clocks {
     previous: Option<CFDictionary>,
     efficiency: Vec<f32>,
     performance: Vec<f32>,
+    validated: (bool, bool),
 }
 type FrequencyRange = Option<(f32, f32)>;
 
@@ -164,8 +165,14 @@ fn frequency_table(key: &str, divisor: f32) -> Option<Vec<f32>> {
 impl Clocks {
     pub fn ranges(&self) -> (FrequencyRange, FrequencyRange) {
         (
-            frequency_bounds(&self.efficiency),
-            frequency_bounds(&self.performance),
+            self.validated
+                .0
+                .then(|| frequency_bounds(&self.efficiency))
+                .flatten(),
+            self.validated
+                .1
+                .then(|| frequency_bounds(&self.performance))
+                .flatten(),
         )
     }
 
@@ -201,27 +208,6 @@ impl Clocks {
         if selected.len() != 2 {
             return None;
         }
-        for dict in &selected {
-            let ptr = dict.as_concrete_TypeRef();
-            let table = match string(unsafe { (api.name)(ptr) }).as_deref() {
-                Some("ECPU") => &efficiency,
-                Some("PCPU") => &performance,
-                _ => return None,
-            };
-            if unsafe { (api.state_count)(ptr) } != table.len() as i32 + 1
-                || string(unsafe { (api.state_name)(ptr, 0) }).as_deref() != Some("IDLE")
-            {
-                return None;
-            }
-            for index in 0..table.len() {
-                let expected = format!("V{index}P{}", table.len() - index - 1);
-                if string(unsafe { (api.state_name)(ptr, index as i32 + 1) }).as_deref()
-                    != Some(expected.as_str())
-                {
-                    return None;
-                }
-            }
-        }
         let selected = CFArray::from_CFTypes(&selected);
         let dictionary =
             CFDictionary::from_CFType_pairs(&[(CFString::new("IOReportChannels"), selected)]);
@@ -251,9 +237,11 @@ impl Clocks {
             previous: None,
             efficiency,
             performance,
+            validated: (false, false),
         })
     }
     pub fn sample(&mut self) -> (Option<f32>, Option<f32>) {
+        self.validated = (false, false);
         let Some(api) = api() else {
             return (None, None);
         };
@@ -329,8 +317,14 @@ impl Clocks {
             }
             let value = (valid && active > 0.).then_some((weighted / active) as f32);
             match name.as_deref() {
-                Some("ECPU") => result.0 = value,
-                Some("PCPU") => result.1 = value,
+                Some("ECPU") => {
+                    result.0 = value;
+                    self.validated.0 = valid;
+                }
+                Some("PCPU") => {
+                    result.1 = value;
+                    self.validated.1 = valid;
+                }
                 _ => {}
             }
         }
@@ -340,6 +334,37 @@ impl Clocks {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_tables_are_validated_from_samples_not_channel_metadata() {
+        // VMs/unsupported hosts may not expose pmgr tables. A physical supported
+        // host with both tables must not lose all clocks during construction.
+        let output = std::process::Command::new("/usr/sbin/sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .unwrap();
+        let chip = String::from_utf8_lossy(&output.stdout);
+        let chip = chip.trim();
+        let divisor = if chip.starts_with("Apple M4") || chip.starts_with("Apple M5") {
+            1000.
+        } else {
+            1_000_000.
+        };
+        if !chip.starts_with("Apple M")
+            || super::frequency_table("voltage-states1-sram", divisor).is_none()
+            || super::frequency_table("voltage-states5-sram", divisor).is_none()
+        {
+            return;
+        }
+        let mut clocks = super::Clocks::new(chip).expect("native tables must not disable clocks");
+        assert_eq!(clocks.ranges(), (None, None));
+        clocks.sample();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        clocks.sample();
+        let (efficiency, performance) = clocks.ranges();
+        assert!(efficiency.is_some_and(|(min, max)| min > 0. && max >= min));
+        assert!(performance.is_some_and(|(min, max)| min > 0. && max >= min));
+    }
+
     #[test]
     fn bounds_do_not_assume_monotonic_dvfs_tables() {
         use super::frequency_bounds;

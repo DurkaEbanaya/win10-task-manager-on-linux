@@ -47,6 +47,11 @@ clock and 4.61 GHz is not inserted as live frequency. The counts row is packed
 independently so the multi-cluster Speed value cannot widen the Threads/Mach ports
 gap. The SLC estimate explanation appears only on hover, without a symbol or extra
 row/window. Sources stay in documentation.
+
+State validation uses an actual IOReport sample/delta, not the enumeration-only
+channel dictionaries, which do not carry state metadata on the tested M5. Checking
+those dictionaries during initialization disabled the entire clock collector;
+the regression test now exercises construction and two native samples.
 Only factual values are recorded, not third-party prose or images.
 
 ### Handles investigation
