@@ -239,7 +239,10 @@ impl Shell {
                 .as_ref()
                 .is_some_and(|worker| worker.submit(settings));
             #[cfg(not(target_os = "linux"))]
-            let submitted = false;
+            let submitted = {
+                let _ = settings;
+                false
+            };
             if !submitted {
                 self.app.finish_launch_shortcuts(Err(
                     "Desktop launch integration is unavailable in this session.".into(),
@@ -307,6 +310,14 @@ fn main() -> eframe::Result {
     let _profile_reporter = mc_magpie::profile::Reporter::start();
     let startup = mc_magpie::profile::Span::new(mc_magpie::profile::Phase::Startup);
     let args = parse_args();
+
+    #[cfg(target_os = "macos")]
+    if args.dump.is_some() || (args.synthetic.is_none() && args.fixture.is_none()) {
+        eprintln!(
+            "Live collection is not yet supported on macOS. Use --synthetic 300 or --fixture DIR."
+        );
+        std::process::exit(2);
+    }
 
     if let Some((n, dir)) = args.dump {
         dump_readings(n, dir);
@@ -407,9 +418,11 @@ fn main() -> eframe::Result {
             eprintln!("renderer '{other}' is not compiled in");
             std::process::exit(2);
         }
-        #[cfg(feature = "glow")]
+        #[cfg(all(target_os = "macos", feature = "wgpu"))]
+        None => native.renderer = eframe::Renderer::Wgpu,
+        #[cfg(all(feature = "glow", not(all(target_os = "macos", feature = "wgpu"))))]
         None => native.renderer = eframe::Renderer::Glow,
-        #[cfg(not(feature = "glow"))]
+        #[cfg(all(not(feature = "glow"), not(all(target_os = "macos", feature = "wgpu"))))]
         None => {}
     }
 

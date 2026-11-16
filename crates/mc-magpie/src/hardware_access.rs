@@ -150,6 +150,7 @@ impl Control {
         !self.sampling.load(Ordering::Acquire)
             || (cancelled != 0 && self.active.load(Ordering::Acquire) == cancelled)
     }
+    #[cfg(target_os = "linux")]
     fn check_io(&self, id: Option<u64>, deadline: Instant) -> Result<(), String> {
         self.check(id.unwrap_or(0), deadline)?;
         if id.is_none() && self.sampling_interrupted() {

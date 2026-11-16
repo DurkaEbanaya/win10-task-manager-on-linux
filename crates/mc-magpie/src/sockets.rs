@@ -33,6 +33,7 @@ use std::time::Instant;
 
 use magpie_types::processes::Process;
 
+#[cfg(target_os = "linux")]
 const NETLINK_SOCK_DIAG: libc::c_int = 4;
 const SOCK_DIAG_BY_FAMILY: u16 = 20;
 const NLMSG_ERROR: u16 = 2;
@@ -161,6 +162,7 @@ pub fn parse_replies(buf: &[u8], out: &mut Vec<TcpSocket>) -> io::Result<bool> {
 }
 
 /// All TCP sockets of one address family with their counters.
+#[cfg(target_os = "linux")]
 fn dump_tcp(family: u8, out: &mut Vec<TcpSocket>) -> io::Result<()> {
     // SAFETY: plain socket syscalls on a descriptor owned by this function
     unsafe {
@@ -217,6 +219,14 @@ fn dump_tcp(family: u8, out: &mut Vec<TcpSocket>) -> io::Result<()> {
         libc::close(fd);
         result
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn dump_tcp(_family: u8, _out: &mut Vec<TcpSocket>) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "per-process TCP collection requires Linux sock_diag",
+    ))
 }
 
 /// Socket inode of every file descriptor seen so far, per process. Only new descriptor numbers
@@ -515,6 +525,22 @@ mod tests {
         let mut global = [0u8; 16];
         global[0] = 0x20;
         assert!(!is_loopback(libc::AF_INET6 as u8, &global));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn unsupported_collection_preserves_existing_values() {
+        let mut process = Process::default();
+        process.usage_stats.network_usage = 123.;
+        let mut processes = HashMap::from([(42, process)]);
+        assert!(!SocketTraffic::default().sample(&mut processes));
+        assert_eq!(processes[&42].usage_stats.network_usage, 123.);
+        assert_eq!(
+            dump_tcp(libc::AF_INET as u8, &mut Vec::new())
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::Unsupported
+        );
     }
 }
 

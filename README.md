@@ -150,6 +150,32 @@ separate `cargo +1.96.1 xtask diagnostic` build (see [perf/README.md](perf/READM
 Release builds with custom `--no-default-features` must select `production-logging`, unless
 they explicitly select the mutually exclusive `diagnostic-profile` mode.
 
+### Building - macOS Apple Silicon (experimental GUI preview)
+
+The macOS port currently supports **synthetic demo data and recorded fixtures only**,
+not live macOS telemetry. CPU/GPU names and statistics in synthetic mode are demo
+values, not measurements of your Mac. Linux remains the supported live backend.
+
+Install Apple Command Line Tools, Rust 1.96.1 and CMake, then clone this development
+branch with submodules (Cargo metadata still requires the Linux backend's submodule):
+
+```sh
+git clone --recurse-submodules --branch feat/macos-arm \
+  https://github.com/DurkaEbanaya/win10-task-manager-on-linux.git
+cd win10-task-manager-on-linux
+cargo +1.96.1 build --locked -p taskmanager-app \
+  --no-default-features --features wgpu,production-logging
+cargo +1.96.1 run --locked -p taskmanager-app \
+  --no-default-features --features wgpu,production-logging -- \
+  --synthetic 300 --no-config
+```
+
+Run from Terminal in a logged-in graphical session. macOS defaults to wgpu (Metal)
+when available; Linux retains its OpenGL default. `--no-config` keeps this preview
+from changing saved preferences. No root privileges or Linux magpie daemon are needed.
+There is no signed `.app`/`.dmg` or live macOS collector yet. Port scope and follow-up
+milestones are tracked in [the macOS port plan](docs/goals/2026-11-16-macos-arm.md).
+
 ### Always on top
 
 On native KDE Plasma 6 Wayland (source builds, native packages and AppImage),

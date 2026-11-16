@@ -3,6 +3,7 @@
  */
 //! Read registered SPD EEPROMs only. No I2C scanning, driver binding, or bus writes.
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::io::Read;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
