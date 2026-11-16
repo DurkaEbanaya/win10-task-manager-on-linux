@@ -1694,9 +1694,24 @@ fn performance_cpu_hover_preserves_menu_and_summary() {
 #[test]
 fn darwin_mach_ports_explanation_is_hover_only() {
     let mut readings = mc_magpie::synthetic_readings(0, 5);
+    readings.cpu.name = Some("Apple M5".into());
     readings.cpu.darwin_cpu = Some(true);
+    readings.cpu.is_virtual_machine = Some(false);
+    readings.cpu.base_freq_khz = None;
+    readings.cpu.l3_cache_bytes = None;
     readings.cpu.darwin_mach_port_count = Some(107947);
     let mut h = performance_harness(Config::default(), readings, 1.);
+    for text in ["SLC:", "≈32 MiB"] {
+        assert!(
+            h.output().shapes.iter().any(|shape| {
+                matches!(&shape.shape, egui::Shape::Text(value) if value.galley.job.text == text)
+            }),
+            "missing compact M5 field {text}"
+        );
+    }
+    assert!(!h.output().shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Text(value) if ["L3 cache:", "Not reported by macOS"].contains(&value.galley.job.text.as_str()))
+    }));
     let label_rect = h
         .output()
         .shapes

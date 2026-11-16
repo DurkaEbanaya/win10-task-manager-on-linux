@@ -12,6 +12,12 @@ pub fn is_base_m5(cpu: &mc_magpie::magpie_types::cpu::Cpu) -> bool {
         && cpu.name.as_deref().map(str::trim) == Some("Apple M5")
 }
 
+/// Published approximate SLC capacity, not CPU L3 or a native measurement.
+/// Source/method limitations are recorded in docs/hardware-monitoring.md.
+pub fn slc_estimate_bytes(cpu: &mc_magpie::magpie_types::cpu::Cpu) -> Option<u64> {
+    is_base_m5(cpu).then_some(32 * 1024 * 1024)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -25,6 +31,7 @@ mod tests {
             ..Default::default()
         };
         assert!(is_base_m5(&cpu));
+        assert_eq!(slc_estimate_bytes(&cpu), Some(32 * 1024 * 1024));
         for name in [
             "Apple M5 Pro",
             "Apple M5 Max",
@@ -34,6 +41,7 @@ mod tests {
         ] {
             cpu.name = Some(name.into());
             assert!(!is_base_m5(&cpu));
+            assert_eq!(slc_estimate_bytes(&cpu), None);
         }
         cpu.name = Some("Apple M5".into());
         cpu.is_virtual_machine = None;

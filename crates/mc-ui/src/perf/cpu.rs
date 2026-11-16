@@ -89,6 +89,7 @@ pub struct CpuPage {
     l1_cache: String,
     l2_cache: String,
     l3_cache: String,
+    slc_cache: Option<String>,
     labels: Labels,
 
     max_duration: String,
@@ -150,6 +151,7 @@ impl CpuPage {
             l1_cache: String::new(),
             l2_cache: String::new(),
             l3_cache: String::new(),
+            slc_cache: None,
             labels: Labels::default(),
             max_duration: super::max_duration(config),
         };
@@ -232,7 +234,7 @@ impl CpuPage {
                     to_human_readable_nice(hz, &DataType::Hertz)
                 }
             }
-            None if self.darwin_cpu => i18n("Not reported by macOS"),
+            None if self.darwin_cpu => "—".into(),
             None => i18n("Unknown"),
         };
 
@@ -259,6 +261,8 @@ impl CpuPage {
         self.l1_cache = cache(cpu.l1_combined_cache_bytes);
         self.l2_cache = cache(cpu.l2_cache_bytes);
         self.l3_cache = cache(cpu.l3_cache_bytes);
+        self.slc_cache = mc_core::apple_specs::slc_estimate_bytes(cpu)
+            .map(|bytes| format!("≈{:.0} MiB", bytes as f64 / (1024. * 1024.)));
         if self.darwin_cpu && cpu.l3_cache_bytes.is_none() {
             // A missing sysctl does not prove that no cache exists. Never relabel
             // Apple system-level cache as CPU L3 or insert a catalog capacity.
@@ -689,7 +693,11 @@ impl DevicePage for CpuPage {
             (i18n("Virtual machine:"), self.virt_machine.clone()),
             (i18n("L1 cache:"), self.l1_cache.clone()),
             (i18n("L2 cache:"), self.l2_cache.clone()),
-            (i18n("L3 cache:"), self.l3_cache.clone()),
+            if let Some(slc) = &self.slc_cache {
+                (i18n("SLC:"), slc.clone())
+            } else {
+                (i18n("L3 cache:"), self.l3_cache.clone())
+            },
         ];
         for (label, value) in [
             (n_("Cpufreq driver:"), &l.cpufreq_driver),
@@ -828,7 +836,7 @@ impl DevicePage for CpuPage {
     Virtual machine:    {}
     L1 cache:           {}
     L2 cache:           {}
-    L3 cache:           {}
+    {}          {}
     Cpufreq driver:     {}
     Cpufreq governor:   {}
     Power preference:   {}
@@ -848,7 +856,12 @@ impl DevicePage for CpuPage {
             self.virt_machine,
             self.l1_cache,
             self.l2_cache,
-            self.l3_cache,
+            if self.slc_cache.is_some() {
+                "SLC:     "
+            } else {
+                "L3 cache:"
+            },
+            self.slc_cache.as_ref().unwrap_or(&self.l3_cache),
             o(&l.cpufreq_driver),
             o(&l.cpufreq_governor),
             o(&l.power_preference),
@@ -891,7 +904,7 @@ mod tests {
         let mut page = CpuPage::new(&readings, &config);
         page.update(&readings, &UpdateEnv::new(&config));
         assert_eq!(page.labels.speed, "—");
-        assert_eq!(page.base_speed, "Not reported by macOS");
+        assert_eq!(page.base_speed, "—");
         let text = page.data_summary();
         assert!(text.contains("Neural Engine: 16 cores"));
         for unwanted in [
@@ -907,6 +920,34 @@ mod tests {
         readings.cpu.name = Some("Apple M5 Pro".into());
         page.update(&readings, &UpdateEnv::new(&config));
         assert!(!page.data_summary().contains("4.61 GHz"));
+    }
+
+    #[test]
+    fn m5_slc_replaces_l3_without_inventing_a_base_frequency() {
+        let mut readings = mc_magpie::synthetic_readings(0, 10);
+        readings.cpu.name = Some("Apple M5".into());
+        readings.cpu.darwin_cpu = Some(true);
+        readings.cpu.is_virtual_machine = Some(false);
+        readings.cpu.base_freq_khz = None;
+        readings.cpu.l3_cache_bytes = None;
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        let view = page.win10_view(&config);
+        assert!(view.info.contains(&("Base Speed:".into(), "—".into())));
+        assert!(view.info.contains(&("SLC:".into(), "≈32 MiB".into())));
+        assert!(!view.info.iter().any(|(key, _)| key == "L3 cache:"));
+        let text = page.data_summary();
+        assert!(text.contains("SLC:") && text.contains("≈32 MiB"));
+        assert!(!text.contains("L3 cache:"));
+        assert_eq!(readings.cpu.l3_cache_bytes, None);
+        assert_eq!(readings.cpu.base_freq_khz, None);
+
+        readings.cpu.name = Some("Apple M5 Pro".into());
+        let mut other = CpuPage::new(&readings, &config);
+        let view = other.win10_view(&config);
+        assert!(!view.info.iter().any(|(key, _)| key == "SLC:"));
+        assert!(view.info.iter().any(|(key, _)| key == "L3 cache:"));
     }
 
     #[test]
@@ -935,7 +976,7 @@ mod tests {
         page.update(&readings, &UpdateEnv::new(&config));
         assert_eq!(page.labels.speed, "3.59 GHz");
         assert_eq!(page.labels.threads, "3341");
-        assert_eq!(page.base_speed, "Not reported by macOS");
+        assert_eq!(page.base_speed, "—");
         assert_eq!(page.l3_cache, "Not reported by macOS");
         assert_eq!(page.sockets, "1");
         assert_eq!(page.virt_machine, "No");
