@@ -156,14 +156,16 @@ The development branch includes a native, unprivileged macOS magpie backend:
 CPU load, kernel-reported core groups/cache sizes, Darwin memory accounting,
 readable processes and process termination,
 mounted volumes, physical disk throughput, interface counters, Apple GPU activity,
-battery charge and a read-only launchd inventory. It is experimental, not telemetry
+battery charge and a read-only launchd inventory. Optional read-only HID/SMC
+temperatures appear in Cooling; memory pressure, driver GPU allocation counters and
+IOReport cluster active-clock averages are shown when available. It is experimental, not telemetry
 parity with Linux. Missing or denied measurements are shown as unavailable.
 
 Install Apple Command Line Tools, Rust 1.96.1 and CMake, then clone this development
 branch with submodules (Cargo metadata still requires the Linux backend's submodule):
 
 ```sh
-git clone --recurse-submodules --branch feat/macos-arm \
+git clone --recurse-submodules --branch feat/macos-telemetry \
   https://github.com/DurkaEbanaya/win10-task-manager-on-linux.git
 cd win10-task-manager-on-linux
 bash support/macos/build.sh
@@ -179,12 +181,14 @@ inside the bundle and exits with the GUI. The bundle is ad-hoc signed, **not** D
 ID signed/notarized; downloaded artifacts may require explicit approval in macOS
 Privacy & Security. Do not disable Gatekeeper globally.
 
-CPU frequency/temperature/power, per-process network/swap/GPU telemetry, GPU memory
+Instantaneous per-core clocks, CPU package power, per-process network/swap/GPU telemetry, GPU memory
 residency, disk busy time/latency and launchd control/logs are not implemented. Process
 visibility is limited by macOS permissions/SIP; totals are not presented as complete
 when some processes cannot be inspected. APFS volumes share container capacity and
-must not be summed as separate physical disks. No private sensor user-client or
-privileged `powermetrics` integration is installed.
+must not be summed as separate physical disks. Sensor APIs are undocumented and may
+be unavailable; raw labels are not guessed CPU/GPU hotspot assignments. IOReport
+clocks are active-residency averages, not instantaneous or nominal clock speeds.
+No privileged `powermetrics`, kext or sensor-control helper is installed.
 
 `--synthetic 300` remains a demo, not measurements of your Mac. Details and measured
 verification are tracked in [the macOS port plan](docs/goals/2026-11-16-macos-arm.md).

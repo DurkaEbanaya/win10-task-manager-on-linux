@@ -245,6 +245,8 @@ impl GpuSnapshot {
                     device.memory.shared_state = state as i32;
                     device.memory.dedicated_used_bytes = None;
                     device.memory.shared_used_bytes = None;
+                    device.memory.driver_allocated_bytes = None;
+                    device.memory.driver_in_use_bytes = None;
                 } else {
                     device.usage = device_usage(
                         &device.engines,
@@ -769,11 +771,26 @@ mod tests {
         let mut r = readings();
         r.gpus.get_mut("a").unwrap().hotspot_temperature_c = Some(73.);
         r.gpus.get_mut("a").unwrap().memory_temperature_c = Some(65.);
+        let memory = r
+            .gpus
+            .get_mut("a")
+            .unwrap()
+            .telemetry
+            .as_mut()
+            .unwrap()
+            .memory
+            .get_or_insert_default();
+        memory.driver_allocated_bytes = Some(4096);
+        memory.driver_in_use_bytes = Some(1024);
         r.running_processes.get_mut(&10).unwrap().start_time_ticks = Some(999);
         let snapshot = checked_snapshot(&r, &mut GpuIndices::default());
         assert_eq!(snapshot.processes[&10].usage.percent, None);
         assert_eq!(snapshot.devices["a"].hotspot_temperature_c, Some(73.));
         assert_eq!(snapshot.devices["a"].memory_temperature_c, Some(65.));
+        assert_eq!(
+            snapshot.devices["a"].memory.driver_allocated_bytes,
+            Some(4096)
+        );
         r.gpus
             .get_mut("a")
             .unwrap()
@@ -786,6 +803,8 @@ mod tests {
         assert_eq!(snapshot.devices["a"].usage.state, TelemetryState::Stale);
         assert_eq!(snapshot.devices["a"].hotspot_temperature_c, None);
         assert_eq!(snapshot.devices["a"].memory_temperature_c, None);
+        assert_eq!(snapshot.devices["a"].memory.driver_allocated_bytes, None);
+        assert_eq!(snapshot.devices["a"].memory.driver_in_use_bytes, None);
         assert_eq!(snapshot.processes[&20].usage.percent, None);
         assert_eq!(snapshot.processes[&20].memory, None);
         let mut r = readings();

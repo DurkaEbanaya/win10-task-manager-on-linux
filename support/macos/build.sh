@@ -11,6 +11,7 @@ cp target/release/taskmanager "$bundle/Contents/MacOS/taskmanager"
 cp subprojects/magpie/target/release/magpie "$bundle/Contents/MacOS/missioncenter-magpie"
 cp COPYING "$bundle/Contents/Resources/COPYING"
 cp docs/PROVENANCE.md "$bundle/Contents/Resources/PROVENANCE.md"
+cp support/macos/macmon-MIT.txt "$bundle/Contents/Resources/macmon-MIT.txt"
 iconset='target/macos/TaskManager.iconset'
 mkdir -p "$iconset"
 for size in 16 32 128 256; do

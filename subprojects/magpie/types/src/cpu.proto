@@ -69,6 +69,8 @@ message PerformanceLevel {
   optional uint64 l1_instruction_bytes = 5;
   optional uint64 l1_data_bytes = 6;
   optional uint64 l2_bytes = 7;
+  // IOReport cluster active-residency average, not an instantaneous core clock.
+  optional float active_frequency_mhz = 8;
 }
 
 message LogicalCpu {

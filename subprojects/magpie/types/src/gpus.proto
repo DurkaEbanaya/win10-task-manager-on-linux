@@ -153,6 +153,10 @@ message MemoryTelemetry {
   optional uint64 reserved_bytes = 5;
   required TelemetryState dedicated_state = 6;
   required TelemetryState shared_state = 7;
+  // Independent driver accounting, NOT dedicated/shared resident bytes or a budget.
+  // In particular Apple AGX reports system allocations and "in use" system memory.
+  optional uint64 driver_allocated_bytes = 8;
+  optional uint64 driver_in_use_bytes = 9;
 }
 
 message DriverInfo {

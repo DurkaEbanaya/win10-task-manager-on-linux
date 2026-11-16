@@ -578,6 +578,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
                 reserved_bytes: Some(128 * 1024 * 1024),
                 dedicated_state: TelemetryState::Available as i32,
                 shared_state: TelemetryState::Available as i32,
+                ..Default::default()
             }),
             driver: Some(DriverInfo {
                 kernel_driver: Some("synthetic".into()),

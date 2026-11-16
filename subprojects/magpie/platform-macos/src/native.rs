@@ -10,8 +10,8 @@ use std::time::Instant;
 use mach2::{mach_init::mach_host_self, mach_port::mach_port_deallocate, traps::mach_task_self};
 use magpie_platform::processes::Process;
 use magpie_platform::{
-    about::*, apps::*, battery::*, cpu::*, disks::*, fan::*, gpus::*, memory::*, network::*,
-    processes::*, services::*, Mutex,
+    about::*, apps::*, battery::*, cpu::*, disks::*, gpus::*, memory::*, network::*, processes::*,
+    services::*, Mutex,
 };
 
 use crate::counters::{cpu_delta, rate};
@@ -24,7 +24,7 @@ impl magpie_platform::DataCacheTypes for DataCacheTypes {
     type CpuCache = CpuCollector;
     type DisksCache = DisksCollector;
     type DisksManager = Unavailable;
-    type FanCache = Unavailable;
+    type FanCache = crate::sensors::Sensors;
     type GpuCache = GpuCollector;
     type MemoryCache = MemoryCollector;
     type NetworkCache = NetworkCollector;
@@ -139,23 +139,35 @@ fn performance_levels() -> Vec<PerformanceLevel> {
                 name: sysctl_string(&read_name("name")).filter(|v| !v.is_empty()),
                 physical_core_count: physical,
                 logical_cpu_count: sysctl::<u32>(&read_name("logicalcpu")).filter(|v| *v > 0),
-                l1_instruction_bytes: sysctl::<u64>(&read_name("l1icachesize")).filter(|v| *v > 0),
-                l1_data_bytes: sysctl::<u64>(&read_name("l1dcachesize")).filter(|v| *v > 0),
-                l2_bytes: sysctl::<u64>(&read_name("l2cachesize")).filter(|v| *v > 0),
+                l1_instruction_bytes: sysctl_size(&read_name("l1icachesize")),
+                l1_data_bytes: sysctl_size(&read_name("l1dcachesize")),
+                l2_bytes: sysctl_size(&read_name("l2cachesize")),
+                ..Default::default()
             })
         })
         .collect()
 }
 
+fn sysctl_size(name: &CStr) -> Option<u64> {
+    // perflevel cache sizes use 32-bit values on some Darwin releases, even
+    // though global cache sizes use 64 bits. Exact-size reads reject truncation.
+    sysctl::<u64>(name)
+        .or_else(|| sysctl::<u32>(name).map(u64::from))
+        .filter(|value| *value > 0)
+}
+
 pub struct CpuCollector {
     data: Cpu,
     previous: Vec<[u32; 4]>,
+    clocks: Option<crate::report::Clocks>,
 }
 impl CpuCache for CpuCollector {
     fn new() -> Self {
+        let name = sysctl_string(c"machdep.cpu.brand_string");
+        let clocks = name.as_deref().and_then(crate::report::Clocks::new);
         Self {
             data: Cpu {
-                name: sysctl_string(c"machdep.cpu.brand_string"),
+                name,
                 base_freq_khz: sysctl::<u64>(c"hw.cpufrequency").map(|v| v / 1000),
                 l1_combined_cache_bytes: sysctl::<u64>(c"hw.l1icachesize")
                     .zip(sysctl::<u64>(c"hw.l1dcachesize"))
@@ -172,9 +184,21 @@ impl CpuCache for CpuCollector {
                 ..Default::default()
             },
             previous: vec![],
+            clocks,
         }
     }
     fn refresh(&mut self) {
+        let (efficiency, performance) = self
+            .clocks
+            .as_mut()
+            .map_or((None, None), crate::report::Clocks::sample);
+        for level in &mut self.data.performance_levels {
+            level.active_frequency_mhz = match level.name.as_deref() {
+                Some("Efficiency") => efficiency,
+                Some("Performance" | "Super") => performance,
+                _ => None,
+            };
+        }
         self.data.usage_valid = Some(false);
         let mut processors = 0;
         let mut info = std::ptr::null_mut();
@@ -283,6 +307,8 @@ impl MemoryCache for MemoryCollector {
     fn refresh(&mut self) {
         self.system.refresh_memory();
         self.data.sample_valid = Some(false);
+        self.data.darwin_pressure_level = sysctl::<u32>(c"kern.memorystatus_vm_pressure_level")
+            .filter(|value| matches!(value, 1 | 2 | 4));
         let mut vm = MaybeUninit::<libc::vm_statistics64>::zeroed();
         let mut count = libc::HOST_VM_INFO64_COUNT;
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
@@ -674,6 +700,12 @@ impl GpuCache for GpuCollector {
                             memory: Some(MemoryTelemetry {
                                 dedicated_state: TelemetryState::Unsupported as i32,
                                 shared_state: TelemetryState::Unsupported as i32,
+                                driver_allocated_bytes: stats.as_ref().and_then(|stats| {
+                                    crate::iokit::number(stats, "Alloc system memory")
+                                }),
+                                driver_in_use_bytes: stats.as_ref().and_then(|stats| {
+                                    crate::iokit::number(stats, "In use system memory")
+                                }),
                                 ..Default::default()
                             }),
                             driver: Some(DriverInfo {
@@ -691,18 +723,6 @@ impl GpuCache for GpuCollector {
     }
     fn cached_entries(&self) -> &HashMap<String, Gpu> {
         &self.data
-    }
-}
-impl FanCache for Unavailable {
-    fn new() -> Self {
-        Self::default()
-    }
-    fn refresh(&mut self) {}
-    fn cached_entries(&self) -> &[Fan] {
-        &[]
-    }
-    fn cached_temperatures(&self) -> &[TemperatureSensor] {
-        &[]
     }
 }
 impl ServiceManager for Unavailable {
@@ -954,12 +974,21 @@ impl NetworkCache for NetworkCollector {
 
 pub struct BatteryCollector {
     data: Vec<Battery>,
+    smc: Option<crate::smc::Smc>,
 }
 impl BatteryCache for BatteryCollector {
     fn new() -> Self {
-        Self { data: vec![] }
+        Self {
+            data: vec![],
+            smc: crate::smc::Smc::open(),
+        }
     }
     fn refresh(&mut self) {
+        let temperature = self
+            .smc
+            .as_mut()
+            .and_then(|smc| smc.temperature(u32::from_be_bytes(*b"TB0T")))
+            .map(|value| value as f32 / 1000.);
         self.data = crate::iokit::entries(c"AppleSmartBattery")
             .into_iter()
             .enumerate()
@@ -990,12 +1019,33 @@ impl BatteryCache for BatteryCollector {
                     power_supply: Some(true),
                     percentage: (current * 100. / maximum).clamp(0., 100.),
                     voltage,
+                    temp: temperature,
                     power: voltage
                         .zip(battery.number("Amperage"))
                         .map(|(v, a)| v * (a as f32 / 1000.).abs()),
                     charge_cycles: battery
                         .number("CycleCount")
                         .and_then(|v| u32::try_from(v).ok()),
+                    // Driver estimate in minutes; 65535 is Apple's unavailable sentinel.
+                    // Do not show a discharge estimate while connected to external power.
+                    time_to_empty: if external == Some(false) {
+                        battery
+                            .number("AvgTimeToEmpty")
+                            .filter(|v| *v > 0 && *v < 65535)
+                            .and_then(|v| u32::try_from(v).ok())
+                            .and_then(|v| v.checked_mul(60))
+                    } else {
+                        None
+                    },
+                    time_to_full: if charging == Some(true) {
+                        battery
+                            .number("AvgTimeToFull")
+                            .filter(|v| *v > 0 && *v < 65535)
+                            .and_then(|v| u32::try_from(v).ok())
+                            .and_then(|v| v.checked_mul(60))
+                    } else {
+                        None
+                    },
                     state: state.map(|v| v as i32),
                     // Apple Silicon may expose only normalized 0..100 capacity;
                     // never relabel it as mWh or infer battery health from it.

@@ -110,6 +110,15 @@ estimated SoC catalog values are incorporated. The Intel-only
 [1700stats](https://github.com/DurkaEbanaya/1700stats/tree/2fc15bd3338ae3f34d358dae6d988ee6cd162622)
 was reviewed for applicability but no code or binaries were incorporated.
 
+The optional IOReport/HID/SMC adapters were implemented locally after checking ABI,
+channel semantics and Apple Silicon frequency-table units against
+[macmon 0.12.0](https://github.com/vladkens/macmon/tree/52eb7799fa815cb512de9e4bf4bf801825365e7d)
+(MIT, copyright 2024 vladkens) and read-only probes on the development Mac. The
+reference notice is retained in `support/macos/macmon-MIT.txt` and shipped with the
+app. macmon is not a runtime dependency. No closed-source TMOG code or assets are
+included: only its public feature description was reviewed. Undocumented APIs and
+driver-specific keys are optional and fail closed when absent or inconsistent.
+
 ## Silver: original historical notice
 
 The removed `rust-gui-silver-bullet/` experiment served as a reference during the GUI port.

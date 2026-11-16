@@ -12,6 +12,12 @@ mod iokit;
 #[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
+mod report;
+#[cfg(target_os = "macos")]
+mod sensors;
+#[cfg(target_os = "macos")]
 mod services;
+#[cfg(target_os = "macos")]
+mod smc;
 #[cfg(target_os = "macos")]
 pub use native::DataCacheTypes;

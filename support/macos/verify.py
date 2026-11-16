@@ -28,9 +28,15 @@ with tempfile.TemporaryDirectory(prefix="macos-smoke-", dir=private) as director
     for level in data["cpu"]["performance_levels"]:
         assert level["physical_core_count"] > 0
         assert 0 <= level["index"] < 16
+        clock = level.get("active_frequency_mhz")
+        assert clock is None or 0 < clock < 10000
     assert data["mem_info"]["sample_valid"] is True
     assert data["mem_info"]["mem_total"] > 0
     assert data["mem_info"]["darwin_accounting"] is True
+    assert data["mem_info"].get("darwin_pressure_level") in (None, 1, 2, 4)
+    for sensor in data["temperatures"]:
+        value = sensor.get("input_millicelsius")
+        assert value is None or 0 < value <= 150000
     assert data["running_processes"], "no readable processes"
     assert any(p["usage_stats"]["memory_valid"] for p in data["running_processes"].values())
     assert all(p["usage_stats"]["network_valid"] is False for p in data["running_processes"].values())

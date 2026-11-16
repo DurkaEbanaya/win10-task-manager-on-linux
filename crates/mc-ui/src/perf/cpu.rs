@@ -439,6 +439,23 @@ impl DevicePage for CpuPage {
             l.unprivileged_hardware.push(row.clone());
             l.hardware.push(row);
         }
+        for level in &cpu.performance_levels {
+            if let Some(mhz) = level
+                .active_frequency_mhz
+                .filter(|value| value.is_finite() && *value > 0.)
+            {
+                let name = level
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("#{}", level.index));
+                let row = (
+                    format!("{} {name}:", i18n("Active clock average:")),
+                    format!("{mhz:.0} MHz"),
+                );
+                l.unprivileged_hardware.push(row.clone());
+                l.hardware.push(row);
+            }
+        }
         if !cpu.logical_cpus.is_empty() {
             let cores: std::collections::HashSet<_> = cpu
                 .logical_cpus
@@ -813,6 +830,7 @@ mod tests {
             l1_instruction_bytes: Some(192 * 1024),
             l1_data_bytes: Some(128 * 1024),
             l2_bytes: Some(16 * 1024 * 1024),
+            ..Default::default()
         }];
         let config = Config::default();
         let mut page = CpuPage::new(&readings, &config);
@@ -833,6 +851,34 @@ mod tests {
         assert_eq!(page.core_tooltips[0], "CPU 0");
         assert!(page.topology.is_empty());
         assert_eq!(page.labels.speed, "—");
+    }
+
+    #[test]
+    fn active_cluster_clock_is_separate_from_instantaneous_frequency() {
+        let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);
+        readings.cpu.frequency_valid = Some(false);
+        readings.cpu.performance_levels = vec![mc_magpie::magpie_types::cpu::PerformanceLevel {
+            name: Some("Efficiency".into()),
+            active_frequency_mhz: Some(1674.7),
+            ..Default::default()
+        }];
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(page.labels.hardware.contains(&(
+            "Active clock average: Efficiency:".into(),
+            "1675 MHz".into()
+        )));
+        assert_eq!(page.labels.speed, "—");
+        readings.cpu.performance_levels[0].active_frequency_mhz = None;
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(
+            !page
+                .labels
+                .hardware
+                .iter()
+                .any(|(label, _)| label.starts_with("Active clock average:"))
+        );
     }
 
     #[test]

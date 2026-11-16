@@ -671,6 +671,20 @@ impl DevicePage for GpuPage {
             self.info
                 .push((i18n("Driver-reserved memory:"), self.bytes(Some(reserved))));
         }
+        for (label, bytes) in [
+            (
+                "Driver system allocation (not VRAM):",
+                memory.driver_allocated_bytes,
+            ),
+            (
+                "Driver system memory in use (not residency):",
+                memory.driver_in_use_bytes,
+            ),
+        ] {
+            if let Some(bytes) = bytes {
+                self.info.push((i18n(label), self.bytes(Some(bytes))));
+            }
+        }
         if let Some(integrated) = device.driver.integrated {
             self.info.push((
                 i18n("Integrated GPU:"),

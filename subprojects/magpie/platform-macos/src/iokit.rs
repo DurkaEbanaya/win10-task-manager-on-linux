@@ -29,6 +29,7 @@ unsafe extern "C" {
         options: u32,
     ) -> CFTypeRef;
     fn IORegistryEntryGetRegistryEntryID(entry: u32, id: *mut u64) -> i32;
+    fn IORegistryEntryGetName(entry: u32, name: *mut c_char) -> i32;
     fn IORegistryEntrySearchCFProperty(
         entry: u32,
         plane: *const c_char,
@@ -49,6 +50,22 @@ impl Drop for Object {
 
 pub struct Entry(Object);
 impl Entry {
+    pub fn name(&self) -> Option<String> {
+        let mut bytes = [0_i8; 128];
+        (unsafe { IORegistryEntryGetName(self.raw(), bytes.as_mut_ptr()) } == 0).then(|| {
+            unsafe { CStr::from_ptr(bytes.as_ptr()) }
+                .to_string_lossy()
+                .into_owned()
+        })
+    }
+    pub fn data(&self, key: &str) -> Option<Vec<u8>> {
+        self.property(key)?
+            .downcast::<core_foundation::data::CFData>()
+            .map(|data| data.bytes().to_vec())
+    }
+    pub(crate) fn raw(&self) -> u32 {
+        self.0 .0
+    }
     pub fn conforms(&self, class: &CStr) -> bool {
         unsafe { IOObjectConformsTo(self.0 .0, class.as_ptr()) != 0 }
     }

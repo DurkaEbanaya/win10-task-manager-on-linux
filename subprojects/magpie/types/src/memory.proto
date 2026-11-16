@@ -100,6 +100,9 @@ message Memory {
   optional uint64 wired_bytes = 70;
   optional uint64 compressed_bytes = 71;
   optional bool sample_valid = 72;
+  // Darwin NOTE_MEMORYSTATUS_PRESSURE flags: 1 normal, 2 warning, 4 critical.
+  // This is a kernel state, not a percentage inferred from free memory.
+  optional uint32 darwin_pressure_level = 73;
 }
 
 message ZramStats {

@@ -321,6 +321,17 @@ impl DevicePage for MemoryPage {
         let l = &mut self.labels;
         l.hardware.clear();
         l.unprivileged_hardware.clear();
+        if self.darwin_accounting {
+            let pressure = match mem.darwin_pressure_level {
+                Some(1) => i18n("Normal"),
+                Some(2) => i18n("Warning"),
+                Some(4) => i18n("Critical"),
+                _ => "—".into(),
+            };
+            let row = (i18n("Memory pressure:"), pressure);
+            l.unprivileged_hardware.push(row.clone());
+            l.hardware.push(row);
+        }
         for (label, clock) in [
             (n_("FCLK:"), mem.fclk_mhz),
             (n_("MCLK:"), mem.mclk_mhz),
@@ -664,6 +675,29 @@ impl DevicePage for MemoryPage {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_pressure_states_are_not_a_guessed_percentage() {
+        let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);
+        readings.mem_info.darwin_accounting = Some(true);
+        let config = mc_core::config::Config::default();
+        let mut page = super::MemoryPage::new(&readings, &config);
+        for (level, label) in [
+            (Some(1), "Normal"),
+            (Some(2), "Warning"),
+            (Some(4), "Critical"),
+            (None, "—"),
+            (Some(3), "—"),
+        ] {
+            readings.mem_info.darwin_pressure_level = level;
+            super::DevicePage::update(&mut page, &readings, &super::UpdateEnv::new(&config));
+            assert!(
+                page.labels
+                    .hardware
+                    .contains(&("Memory pressure:".into(), label.into()))
+            );
+        }
+    }
+
     use super::*;
     #[test]
     fn memory_heading_identifies_package_and_technology_without_guessing() {
