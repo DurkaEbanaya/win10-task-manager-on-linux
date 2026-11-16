@@ -124,7 +124,13 @@ layout and the `processor_set_default`/`processor_set_statistics` API. XNU's
 `osfmk/kern/processor.c` was read to confirm that the default-set load information
 returns global task/thread counts, not a permission-filtered list of task ports.
 Only API/layout facts were used, not XNU implementation code. Darwin's
-`kern.num_files` is labeled Open files, not Windows Handles or Mach IPC rights.
+`kern.num_files` is retained as separate metadata, never used for Windows Handles
+or Mach IPC rights. The compact Darwin view instead shows **Mach ports**, sampled
+by invoking the existing Apple-signed `/usr/bin/top` with PID/port-only output.
+Apple's public `top/libtop.c` was consulted only to confirm that its port statistic
+uses `mach_port_space_basic_info().iisb_table_inuse`. No Apple implementation code,
+binary or Apple-only entitlement is included in this project. See
+`docs/hardware-monitoring.md` for parser limits and coverage probes.
 
 ## Silver: original historical notice
 

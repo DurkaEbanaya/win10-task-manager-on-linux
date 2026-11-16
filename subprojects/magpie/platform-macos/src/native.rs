@@ -200,6 +200,7 @@ pub struct CpuCollector {
     data: Cpu,
     previous: Vec<[u32; 4]>,
     clocks: Option<crate::report::Clocks>,
+    ports: crate::ports::Ports,
 }
 impl CpuCache for CpuCollector {
     fn new() -> Self {
@@ -236,6 +237,7 @@ impl CpuCache for CpuCollector {
             },
             previous: vec![],
             clocks,
+            ports: crate::ports::Ports::new(),
         }
     }
     fn refresh(&mut self) {
@@ -302,6 +304,7 @@ impl CpuCache for CpuCollector {
             }
         }
         self.data.uptime_seconds = sysinfo::System::uptime();
+        self.data.darwin_mach_port_count = self.ports.sample();
         let threads = system_thread_count();
         self.data.total_thread_count = threads.unwrap_or_default();
         self.data.thread_count_valid = Some(threads.is_some());

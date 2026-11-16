@@ -594,6 +594,7 @@ fn overview<'a>(
         },
         stats: vec![],
         stat_legends: vec![],
+        stat_tooltips: vec![],
         info: vec![],
         composition: None,
         swap_compression: None,

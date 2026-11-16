@@ -43,11 +43,26 @@ names, including dead names and port sets, not Windows object handles or Unix
 file descriptors. Unprivileged inspection on 2026-11-16 succeeded only for the
 probe itself: 1 readable task out of 796 positive PIDs; task-name ports could be
 obtained for 476 tasks but were insufficient for this query (return 16). A root
-probe was authorized in scope but the native administrator dialog returned
-authentication failure -60007; root visibility remains unverified. No persistent
-helper, sudoers change or security-policy change was made. Never present the
-accessible subset as a complete system Handles count. Any alternative metric
-name must be agreed with the user before adding it to the UI.
+probe subsequently run manually by the user covered only 9 inspect/read tasks
+(1,981 entries); name-only access listed 806 tasks but could not read their tables.
+Root alone is insufficient for a complete native scan.
+
+The Apple-signed `/usr/bin/top` has the system-task-port read entitlement. A
+read-only `top -l 1 -n 100000 -R -F -stats pid,ports` invocation returned 790 of
+790 reported rows (107,947 entries) without sudo. A separate observation with
+VM/framework scanning disabled completed in 0.170 seconds with 787 rows; this is
+one invocation observation, not an application overhead benchmark. No proprietary
+code is copied or Apple-only entitlement added to our signature.
+
+The user approved **Mach ports** in the old Handles position with explanation
+only on hover. The backend samples top at most every five seconds, with a
+two-second deadline and four-MiB output cap, no shell, no process names or command
+arguments in output, and always reaps the child. Output stays in memory.
+Missing/duplicate/truncated/non-numeric rows, a zero userspace port count, failed
+exit or overflow invalidate the aggregate instead of publishing a partial sum.
+PID 0's zero is top's kernel-task convention, not a measured kernel IPC table.
+This sums top's task IPC entries, not all unique kernel port objects.
+No persistent helper, sudoers change or security-policy change was made.
 
 ### Kernel extensions versus a privileged collector
 

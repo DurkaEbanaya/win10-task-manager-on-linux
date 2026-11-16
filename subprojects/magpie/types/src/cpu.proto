@@ -63,6 +63,8 @@ message Cpu {
   optional bool darwin_cpu = 34;
   // kern.num_files: system-wide open file objects, NOT Windows handles or FDs summed over PIDs.
   optional uint64 darwin_open_file_count = 35;
+  // Sum of top #PORTS across a complete sample; occupied Mach IPC names, not Windows handles.
+  optional uint64 darwin_mach_port_count = 36;
 }
 
 message PerformanceLevel {

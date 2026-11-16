@@ -198,6 +198,8 @@ pub struct PageView<'a> {
     pub stats: Vec<Vec<(String, String)>>,
     /// Legend bars of statistics that name a graph series, by (row, column)
     pub stat_legends: Vec<((usize, usize), StatLegend)>,
+    /// Hover-only explanations by (row, column); never affect layout.
+    pub stat_tooltips: Vec<((usize, usize), String)>,
     /// Key/value rows right of the statistics
     pub info: Vec<(String, String)>,
     pub composition: Option<&'a mem_composition::MemComposition>,

@@ -270,6 +270,7 @@ impl DevicePage for SystemPage {
             panels: vec![],
             stats: vec![],
             stat_legends: vec![],
+            stat_tooltips: vec![],
             info: self.rows.clone(),
             composition: None,
             swap_compression: None,

@@ -1692,6 +1692,42 @@ fn performance_cpu_hover_preserves_menu_and_summary() {
 }
 
 #[test]
+fn darwin_mach_ports_explanation_is_hover_only() {
+    let mut readings = mc_magpie::synthetic_readings(0, 5);
+    readings.cpu.darwin_cpu = Some(true);
+    readings.cpu.darwin_mach_port_count = Some(107947);
+    let mut h = performance_harness(Config::default(), readings, 1.);
+    let label_rect = h
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "Mach ports" => {
+                Some(egui::Rect::from_min_size(text.pos, text.galley.size()))
+            }
+            _ => None,
+        })
+        .expect("Mach ports occupies the former Handles statistic");
+    let tooltip = "Mach IPC entries held by processes. The macOS counterpart shown instead of Windows Handles; not open files or unique kernel objects. Updated every 5 seconds; — means unavailable.";
+    assert!(h.query_by_label(tooltip).is_none());
+    h.hover_at(label_rect.center());
+    h.run_steps(40);
+    assert!(
+        h.query_by_label(tooltip).is_some(),
+        "hover must explain the replacement"
+    );
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+    std::fs::create_dir_all(&out).unwrap();
+    h.render()
+        .unwrap()
+        .save(out.join("win10-darwin-mach-ports-hover.png"))
+        .unwrap();
+    h.hover_at(egui::pos2(20., 20.));
+    h.run_steps(40);
+    assert!(h.query_by_label(tooltip).is_none());
+}
+
+#[test]
 fn performance_memory_composition_regions_and_ram_hover() {
     use mc_core::format::{DataType, to_human_readable_nice};
 

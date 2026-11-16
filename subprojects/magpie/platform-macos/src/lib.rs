@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-//! Native, unprivileged macOS telemetry. Only the read-only launchd inventory
-//! uses a bounded launchctl subprocess on a daemon worker.
+//! Native, unprivileged macOS telemetry. Read-only launchd and Mach-port counts
+//! use bounded launchctl/top subprocesses on daemon workers.
 
 #[cfg(any(target_os = "macos", test))]
 mod counters;
@@ -11,6 +11,8 @@ mod counters;
 mod iokit;
 #[cfg(target_os = "macos")]
 mod native;
+#[cfg(any(target_os = "macos", test))]
+mod ports;
 #[cfg(target_os = "macos")]
 mod report;
 #[cfg(target_os = "macos")]

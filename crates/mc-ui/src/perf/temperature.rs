@@ -156,6 +156,7 @@ impl SensorEntry {
             )],
             stats: vec![stats],
             stat_legends: vec![],
+            stat_tooltips: vec![],
             info,
             composition: None,
             swap_compression: None,

@@ -594,7 +594,7 @@ impl DevicePage for CpuPage {
         l.handles = count(cpu.total_handle_count, cpu.handle_count_valid);
         if self.darwin_cpu {
             l.handles = cpu
-                .darwin_open_file_count
+                .darwin_mach_port_count
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "—".into());
         }
@@ -663,6 +663,8 @@ impl DevicePage for CpuPage {
         ];
         if !self.darwin_cpu {
             counts.push((i18n("Handles"), l.handles.clone()));
+        } else {
+            counts.push((i18n("Mach ports"), l.handles.clone()));
         }
         let stats = vec![
             vec![
@@ -741,6 +743,16 @@ impl DevicePage for CpuPage {
             panels,
             stats,
             stat_legends: vec![],
+            stat_tooltips: if self.darwin_cpu {
+                vec![(
+                    (1, 2),
+                    i18n(
+                        "Mach IPC entries held by processes. The macOS counterpart shown instead of Windows Handles; not open files or unique kernel objects. Updated every 5 seconds; — means unavailable.",
+                    ),
+                )]
+            } else {
+                vec![]
+            },
             info,
             composition: None,
             swap_compression: None,
@@ -850,7 +862,7 @@ impl DevicePage for CpuPage {
             l.processes,
             l.threads,
             if self.darwin_cpu {
-                String::new()
+                format!("    Mach ports:  {}", l.handles)
             } else {
                 format!("    Handles:     {}", l.handles)
             },
@@ -912,6 +924,7 @@ mod tests {
         cpu.total_thread_count = 3341;
         cpu.handle_count_valid = Some(false);
         cpu.darwin_open_file_count = Some(6507);
+        cpu.darwin_mach_port_count = Some(107947);
         cpu.performance_levels = vec![mc_magpie::magpie_types::cpu::PerformanceLevel {
             name: Some("Super".into()),
             active_frequency_mhz: Some(3593.),
@@ -929,6 +942,14 @@ mod tests {
         let view = page.win10_view(&config);
         assert!(!view.stats[1].iter().any(|(label, _)| label == "Open files"));
         assert!(!view.stats[1].iter().any(|(label, _)| label == "Handles"));
+        assert_eq!(view.stats[1][2], ("Mach ports".into(), "107947".into()));
+        assert_eq!(view.stat_tooltips.len(), 1);
+        assert_eq!(view.stat_tooltips[0].0, (1, 2));
+        assert!(
+            view.stat_tooltips[0]
+                .1
+                .contains("instead of Windows Handles")
+        );
         assert!(
             view.stats[0]
                 .iter()
@@ -936,6 +957,7 @@ mod tests {
         );
         readings.cpu.performance_levels[0].active_frequency_mhz = None;
         readings.cpu.darwin_open_file_count = None;
+        readings.cpu.darwin_mach_port_count = None;
         readings.cpu.thread_count_valid = Some(false);
         page.update(&readings, &UpdateEnv::new(&config));
         assert_eq!(page.labels.speed, "—");

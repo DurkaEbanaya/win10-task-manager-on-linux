@@ -294,6 +294,7 @@ impl DevicePage for NetworkPage {
             )],
             stats,
             stat_legends: vec![((0, 0), StatLegend::Dashed), ((0, 1), StatLegend::Solid)],
+            stat_tooltips: vec![],
             info,
             composition: None,
             swap_compression: None,

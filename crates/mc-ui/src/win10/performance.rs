@@ -2350,6 +2350,14 @@ fn page_ui(
                 Align::Min,
             );
             stats_right = stats_right.max(x + w);
+            if let Some((_, tooltip)) = view.stat_tooltips.iter().find(|(at, _)| *at == (r, c)) {
+                ui.interact(
+                    Rect::from_min_max(pos2(x, cap - 4.), pos2(x + w, cap + STAT_VALUE_DY + 24.)),
+                    ui.id().with(("stat-tooltip", r, c)),
+                    Sense::hover(),
+                )
+                .on_hover_text(tooltip);
+            }
             x += (w + STAT_COLUMN_GAP).round();
         }
     }
