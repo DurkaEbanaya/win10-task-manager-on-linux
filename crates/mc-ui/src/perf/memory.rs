@@ -475,7 +475,7 @@ impl DevicePage for MemoryPage {
         }
         l.usage_tooltip = if mem.darwin_accounting == Some(true) {
             i18n_f(
-                "In use ({})\n\nPhysical memory minus the Darwin estimate of available memory (free, inactive and purgeable pages). This is not Activity Monitor's Memory Used or memory pressure. Cached, wired and compressed memory overlap this accounting and must not be added to In use.",
+                "In use ({})\n\nPhysical memory minus the Darwin estimate of available memory (free + inactive + purgeable - compressor pages, clamped to physical memory). This is not Activity Monitor's Memory Used or memory pressure. Cached, wired and compressed memory overlap this accounting and must not be added to In use.",
                 &[&l.in_use],
             )
         } else {

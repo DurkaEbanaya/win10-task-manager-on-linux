@@ -259,6 +259,16 @@ pub struct MemoryCollector {
     data: Memory,
     system: sysinfo::System,
 }
+
+fn vm_statistics_complete(count: libc::mach_msg_type_number_t) -> bool {
+    // libc also defines fields added after macOS 15. Older kernels legitimately
+    // return a shorter revision; require every field we read, not the newest tail.
+    let required = std::mem::offset_of!(libc::vm_statistics64, external_page_count)
+        + size_of::<libc::natural_t>();
+    let returned = count as usize * size_of::<libc::integer_t>();
+    returned >= required && count <= libc::HOST_VM_INFO64_COUNT
+}
+
 impl MemoryCache for MemoryCollector {
     fn new() -> Self {
         Self {
@@ -286,7 +296,7 @@ impl MemoryCache for MemoryCollector {
                 &mut count,
             );
             mach_port_deallocate(mach_task_self(), host);
-            result == libc::KERN_SUCCESS && count == libc::HOST_VM_INFO64_COUNT
+            result == libc::KERN_SUCCESS && vm_statistics_complete(count)
         };
         if !success || page_size <= 0 {
             return;
@@ -295,8 +305,14 @@ impl MemoryCache for MemoryCollector {
         let bytes = |pages: u32| pages as u64 * page_size as u64;
         self.data.mem_total = self.system.total_memory();
         self.data.mem_free = bytes(vm.free_count).min(self.data.mem_total);
-        // Same public Darwin VM estimate used by sysinfo: free + inactive + purgeable.
-        self.data.mem_available = self.system.available_memory().min(self.data.mem_total);
+        // Same estimate as sysinfo, using this exact sample rather than a second
+        // VM read: free + inactive + purgeable - compressor pages (saturating).
+        self.data.mem_available = u64::from(vm.free_count)
+            .saturating_add(u64::from(vm.inactive_count))
+            .saturating_add(u64::from(vm.purgeable_count))
+            .saturating_sub(u64::from(vm.compressor_page_count))
+            .saturating_mul(page_size as u64)
+            .min(self.data.mem_total);
         self.data.active = bytes(vm.active_count);
         self.data.inactive = bytes(vm.inactive_count);
         self.data.cached = bytes(vm.external_page_count);
@@ -998,6 +1014,18 @@ mod tests {
     use super::*;
     use std::process::Command;
     use std::time::Duration;
+
+    #[test]
+    fn vm_statistics_accepts_older_complete_revisions_but_not_short_reads() {
+        let required_bytes = std::mem::offset_of!(libc::vm_statistics64, external_page_count)
+            + size_of::<libc::natural_t>();
+        let required = (required_bytes / size_of::<libc::integer_t>()) as u32;
+        assert!(vm_statistics_complete(required));
+        assert!(vm_statistics_complete(libc::HOST_VM_INFO64_COUNT));
+        assert!(!vm_statistics_complete(required - 1));
+        assert!(!vm_statistics_complete(0));
+        assert!(!vm_statistics_complete(libc::HOST_VM_INFO64_COUNT + 1));
+    }
 
     #[test]
     fn native_memory_cpu_and_own_process_are_measured_after_warmup() {
