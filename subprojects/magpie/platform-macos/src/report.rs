@@ -124,6 +124,17 @@ pub struct Clocks {
     efficiency: Vec<f32>,
     performance: Vec<f32>,
 }
+type FrequencyRange = Option<(f32, f32)>;
+
+fn frequency_bounds(table: &[f32]) -> FrequencyRange {
+    if table.iter().any(|value| !value.is_finite() || *value <= 0.) {
+        return None;
+    }
+    Some((
+        table.iter().copied().reduce(f32::min)?,
+        table.iter().copied().reduce(f32::max)?,
+    ))
+}
 // IOReport/CF ownership is confined to one cache, accessed under the handler's
 // mutex. Workers may move it, but never sample or release it concurrently.
 unsafe impl Send for Clocks {}
@@ -151,6 +162,13 @@ fn frequency_table(key: &str, divisor: f32) -> Option<Vec<f32>> {
 }
 
 impl Clocks {
+    pub fn ranges(&self) -> (FrequencyRange, FrequencyRange) {
+        (
+            frequency_bounds(&self.efficiency),
+            frequency_bounds(&self.performance),
+        )
+    }
+
     pub fn new(chip: &str) -> Option<Self> {
         // Restrict the state/table mapping to families with this known ABI.
         // Unknown chips/VMs remain unavailable rather than using nominal clocks.
@@ -182,6 +200,27 @@ impl Clocks {
             .collect();
         if selected.len() != 2 {
             return None;
+        }
+        for dict in &selected {
+            let ptr = dict.as_concrete_TypeRef();
+            let table = match string(unsafe { (api.name)(ptr) }).as_deref() {
+                Some("ECPU") => &efficiency,
+                Some("PCPU") => &performance,
+                _ => return None,
+            };
+            if unsafe { (api.state_count)(ptr) } != table.len() as i32 + 1
+                || string(unsafe { (api.state_name)(ptr, 0) }).as_deref() != Some("IDLE")
+            {
+                return None;
+            }
+            for index in 0..table.len() {
+                let expected = format!("V{index}P{}", table.len() - index - 1);
+                if string(unsafe { (api.state_name)(ptr, index as i32 + 1) }).as_deref()
+                    != Some(expected.as_str())
+                {
+                    return None;
+                }
+            }
         }
         let selected = CFArray::from_CFTypes(&selected);
         let dictionary =
@@ -296,5 +335,20 @@ impl Clocks {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn bounds_do_not_assume_monotonic_dvfs_tables() {
+        use super::frequency_bounds;
+        assert_eq!(
+            frequency_bounds(&[1308., 4464., 4428., 4416.]),
+            Some((1308., 4464.))
+        );
+        assert_eq!(frequency_bounds(&[]), None);
+        assert_eq!(frequency_bounds(&[0., 972.]), None);
+        assert_eq!(frequency_bounds(&[972., f32::NAN]), None);
     }
 }

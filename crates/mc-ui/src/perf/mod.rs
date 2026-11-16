@@ -200,8 +200,12 @@ pub struct PageView<'a> {
     pub stat_legends: Vec<((usize, usize), StatLegend)>,
     /// Hover-only explanations by (row, column); never affect layout.
     pub stat_tooltips: Vec<((usize, usize), String)>,
+    /// Rows packed independently instead of sharing widths with other rows.
+    pub independent_stat_rows: Vec<usize>,
     /// Key/value rows right of the statistics
     pub info: Vec<(String, String)>,
+    /// Hover-only explanations keyed by metadata row index.
+    pub info_tooltips: Vec<(usize, String)>,
     pub composition: Option<&'a mem_composition::MemComposition>,
     pub swap_compression: Option<&'a swap_compression::SwapCompression>,
 }

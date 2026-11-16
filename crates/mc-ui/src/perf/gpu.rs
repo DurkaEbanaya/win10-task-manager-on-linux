@@ -783,6 +783,8 @@ impl DevicePage for GpuPage {
             stats: self.stats.clone(),
             stat_legends: vec![],
             stat_tooltips: vec![],
+            independent_stat_rows: vec![],
+            info_tooltips: vec![],
             info: self.info.clone(),
             composition: None,
             swap_compression: None,

@@ -77,6 +77,9 @@ message PerformanceLevel {
   optional uint64 l2_bytes = 7;
   // IOReport cluster active-residency average, not an instantaneous core clock.
   optional float active_frequency_mhz = 8;
+  // Native DVFS table bounds, not base/boost guarantees or live clocks.
+  optional float minimum_frequency_mhz = 9;
+  optional float maximum_frequency_mhz = 10;
 }
 
 message LogicalCpu {

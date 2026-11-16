@@ -24,12 +24,12 @@ Reviewed 2026-11-16:
 | NPU rating | 42 TOPS, explicitly an unverified Wikipedia claim | Apple pages reviewed do not specify TOPS; CPU-Monkey currently says 60 TOPS. Precision/workload/sparsity are unspecified, so do not treat the claim as verified hardware telemetry or use it as a utilization denominator. |
 | Media Engine | Hardware H.264, HEVC, ProRes, ProRes RAW; AV1 decode; Apple above | AV1 decode does not imply AV1 encode. No decoder activity, engine occupancy or available VideoToolbox session is inferred. |
 | CPU frequency, up to | 4.61 GHz; CPU-Monkey above | Secondary-source reference maximum. The source's prose says **up to**; neither a base clock nor the current Mac's DVFS limit is established. Keep Base Speed unknown if not reported natively. |
-| SLC | ≈32 MiB; [Michael's Tinkerings, Apple M5 GPU Roofline Analysis, 2026-03-15](https://www.michaelstinkerings.org/apple-m5-gpu-roofline-analysis/) | Author's approximate shared system-level cache capacity for the base M5, not an Apple-published size, native query or CPU L3. Displayed with ≈; source discusses cache/texture and matrix-size behavior, not a direct cache-capacity register read. |
+| SLC | 32 MiB; [Michael's Tinkerings, Apple M5 GPU Roofline Analysis, 2026-03-15](https://www.michaelstinkerings.org/apple-m5-gpu-roofline-analysis/) | Author's approximate shared system-level cache capacity for the base M5, not an Apple-published size, native query or CPU L3. The hover explanation discloses this estimate; source discusses cache/texture and matrix-size behavior, not a direct cache-capacity register read. |
 
 This deliberately does not infer L3 from an SLC estimate, copy another M5 variant's
 GPU/core configuration, or present a catalog figure as a physical measurement.
 The conflicting TOPS claim and secondary up-to frequency are not displayed.
-The compact CPU page replaces L3 with **SLC: ≈32 MiB** only for the exact native
+The compact CPU page replaces L3 with **SLC: 32 MiB** only for the exact native
 non-guest base M5 match. Its independent catalog value does not overwrite the
 wire L3 field. It is not applied to Pro/Max/Ultra or unknown models.
 
@@ -37,9 +37,16 @@ No single base clock has been established: the physical Mac's DVFS tables span
 0.972–3.048 GHz (E) and 1.308–4.464 GHz (P/Super), neither a CPU base-clock contract.
 Published sources disagree: CPU-Monkey lists 0.90–3.05 / 0.91–4.61 GHz; NanoReview
 calls 4.61 GHz base; EatYourBytes calls 1.31 GHz base and 4.61 GHz boost. Therefore
-**Base Speed: —** replaces the long missing-value prose when no native value is
-available. 3.048 GHz is not relabeled as a base clock and 4.61 GHz is not inserted
-as live frequency. Sources/qualifiers stay in documentation, not new UI windows.
+On Apple Silicon, **Frequency range** replaces Base Speed in the same row, showing
+each core type's native minimum and maximum DVFS table entries (E/P/S abbreviate
+Efficiency/Performance/Super). Both bounds must be valid and table/channel state
+counts/names must match; missing bounds remain `—`. Bounds are not current clocks,
+base/boost guarantees or an online catalog fallback. Use actual min/max, not first
+and last entries: the P table is not monotonic. 3.048 GHz is not relabeled as a base
+clock and 4.61 GHz is not inserted as live frequency. The counts row is packed
+independently so the multi-cluster Speed value cannot widen the Threads/Mach ports
+gap. The SLC estimate explanation appears only on hover, without a symbol or extra
+row/window. Sources stay in documentation.
 Only factual values are recorded, not third-party prose or images.
 
 ### Handles investigation

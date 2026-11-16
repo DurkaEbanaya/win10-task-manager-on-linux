@@ -418,6 +418,8 @@ impl DevicePage for DiskPage {
             stats,
             stat_legends: vec![((1, 0), StatLegend::Solid), ((1, 1), StatLegend::Dashed)],
             stat_tooltips: vec![],
+            independent_stat_rows: vec![],
+            info_tooltips: vec![],
             info,
             composition: None,
             swap_compression: None,

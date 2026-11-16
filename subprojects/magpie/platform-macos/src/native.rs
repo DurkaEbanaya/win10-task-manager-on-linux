@@ -245,12 +245,23 @@ impl CpuCache for CpuCollector {
             .clocks
             .as_mut()
             .map_or((None, None), crate::report::Clocks::sample);
+        let (efficiency_range, performance_range) = self
+            .clocks
+            .as_ref()
+            .map_or((None, None), crate::report::Clocks::ranges);
         for level in &mut self.data.performance_levels {
             level.active_frequency_mhz = match level.name.as_deref() {
                 Some("Efficiency") => efficiency,
                 Some("Performance" | "Super") => performance,
                 _ => None,
             };
+            let range = match level.name.as_deref() {
+                Some("Efficiency") => efficiency_range,
+                Some("Performance" | "Super") => performance_range,
+                _ => None,
+            };
+            level.minimum_frequency_mhz = range.map(|(min, _)| min);
+            level.maximum_frequency_mhz = range.map(|(_, max)| max);
         }
         self.data.usage_valid = Some(false);
         let mut processors = 0;

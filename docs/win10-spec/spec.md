@@ -48,6 +48,15 @@ this document, never the screenshots.
 
 ## Themes and additional metadata (own design, not measured)
 
+macOS CPU adaptation (own design, not measured): retain the existing statistic
+blocks and metadata rows. Pack the Processes / Threads / Mach ports row using
+its own measured text widths and the existing statistic-column gap; multi-cluster
+Speed text must not stretch that row. On Apple Silicon, Frequency range occupies
+the former Base Speed row with E/P/S core-type DVFS minimum–maximum bounds. The
+base M5's published SLC estimate is shown as `SLC: 32 MiB` without an approximation
+symbol; disclose its estimated, non-native nature only on hover over that row.
+No extra rows or windows are introduced. Linux/reference geometry is unchanged.
+
 - View → Theme: Light (default), Dark, System; System follows live desktop changes. Light keeps
   every measured colour. Dark keeps geometry/fonts, uses `#202020` surfaces, `#f0f0f0` text,
   `#aaaaaa` labels, `#293e4c` hover, `#284c66` selection, `#65b6ef` links and `#a9c8ef` headings.

@@ -471,6 +471,8 @@ impl DevicePage for BatteryPage {
             stats,
             stat_legends: vec![],
             stat_tooltips: vec![],
+            independent_stat_rows: vec![],
+            info_tooltips: vec![],
             info,
             composition: None,
             swap_compression: None,

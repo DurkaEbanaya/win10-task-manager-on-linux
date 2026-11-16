@@ -141,6 +141,8 @@ fn overview<'a>(summary: &'a mut SummaryGraph, caption: &str) -> PageView<'a> {
         stats: vec![],
         stat_legends: vec![],
         stat_tooltips: vec![],
+        independent_stat_rows: vec![],
+        info_tooltips: vec![],
         info: vec![],
         composition: None,
         swap_compression: None,

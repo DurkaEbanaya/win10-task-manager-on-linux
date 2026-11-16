@@ -2319,7 +2319,15 @@ fn page_ui(
                 .collect()
         })
         .collect();
+    let independent_widths: Vec<_> = view
+        .independent_stat_rows
+        .iter()
+        .filter_map(|&row| widths.get(row).cloned().map(|width| (row, width)))
+        .collect();
     align_columns(&mut widths, gx1 + 1. - gx0);
+    for (row, width) in independent_widths {
+        widths[row] = width;
+    }
     for (r, (row, widths)) in view.stats.iter().zip(&widths).enumerate() {
         let cap = stats_top + 5. + STAT_PITCH * r as f32;
         let mut x = gx0;
@@ -2429,6 +2437,14 @@ fn page_ui(
                 ),
                 full_value,
             );
+            if let Some((_, tooltip)) = view.info_tooltips.iter().find(|(at, _)| *at == i + n) {
+                ui.interact(
+                    Rect::from_min_max(pos2(label_x, cap - 3.), pos2(value_x + value_w, cap + 12.)),
+                    ui.id().with(("info-tooltip", i + n)),
+                    Sense::hover(),
+                )
+                .on_hover_text(tooltip);
+            }
         }
         i += column.len();
         label_x = (value_x + value_w + 24.).round();
@@ -2478,11 +2494,16 @@ fn page_ui(
                 egui::ScrollArea::vertical()
                     .max_height(m::METADATA_POPUP_MAX_H)
                     .show(ui, |ui| {
-                        for (label, value) in &view.info {
+                        for (index, (label, value)) in view.info.iter().enumerate() {
                             ui.horizontal(|ui| {
                                 ui.label(label);
                                 let response = ui.label(value);
                                 paint::copy_value(ui, response.rect, value);
+                                if let Some((_, tooltip)) =
+                                    view.info_tooltips.iter().find(|(at, _)| *at == index)
+                                {
+                                    response.on_hover_text(tooltip);
+                                }
                             });
                         }
                     });

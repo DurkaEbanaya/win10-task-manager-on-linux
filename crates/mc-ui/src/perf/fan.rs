@@ -166,6 +166,8 @@ impl FanEntry {
             stats: vec![stats],
             stat_legends,
             stat_tooltips: vec![],
+            independent_stat_rows: vec![],
+            info_tooltips: vec![],
             info,
             composition: None,
             swap_compression: None,

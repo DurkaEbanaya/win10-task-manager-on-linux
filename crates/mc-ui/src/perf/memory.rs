@@ -622,6 +622,8 @@ impl DevicePage for MemoryPage {
             stats,
             stat_legends: vec![],
             stat_tooltips: vec![],
+            independent_stat_rows: vec![],
+            info_tooltips: vec![],
             info,
             composition: Some(&self.composition),
             swap_compression: Some(&self.swap_compression),

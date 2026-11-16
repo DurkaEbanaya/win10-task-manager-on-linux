@@ -1700,8 +1700,25 @@ fn darwin_mach_ports_explanation_is_hover_only() {
     readings.cpu.base_freq_khz = None;
     readings.cpu.l3_cache_bytes = None;
     readings.cpu.darwin_mach_port_count = Some(107947);
+    readings.cpu.performance_levels = vec![
+        mc_magpie::magpie_types::cpu::PerformanceLevel {
+            name: Some("Super".into()),
+            minimum_frequency_mhz: Some(1308.),
+            maximum_frequency_mhz: Some(4464.),
+            active_frequency_mhz: Some(3590.),
+            ..Default::default()
+        },
+        mc_magpie::magpie_types::cpu::PerformanceLevel {
+            name: Some("Efficiency".into()),
+            minimum_frequency_mhz: Some(972.),
+            maximum_frequency_mhz: Some(3048.),
+            active_frequency_mhz: Some(1600.),
+            ..Default::default()
+        },
+    ];
+    let slc_readings = readings.clone();
     let mut h = performance_harness(Config::default(), readings, 1.);
-    for text in ["SLC:", "≈32 MiB"] {
+    for text in ["SLC:", "32 MiB"] {
         assert!(
             h.output().shapes.iter().any(|shape| {
                 matches!(&shape.shape, egui::Shape::Text(value) if value.galley.job.text == text)
@@ -1723,6 +1740,34 @@ fn darwin_mach_ports_explanation_is_hover_only() {
             _ => None,
         })
         .expect("Mach ports occupies the former Handles statistic");
+    let thread_right = h
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "Threads" => {
+                Some(text.pos.x + text.galley.size().x)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        label_rect.left() - thread_right < 65.,
+        "Speed must not stretch the counts row"
+    );
+    let slc_rect = h
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "SLC:" => {
+                Some(egui::Rect::from_min_size(text.pos, text.galley.size()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    let slc_tip = "Published approximate system-level cache capacity for the base Apple M5, not a native measurement or CPU L3 cache.";
+    assert!(h.query_by_label(slc_tip).is_none());
     let tooltip = "Mach IPC entries held by processes. The macOS counterpart shown instead of Windows Handles; not open files or unique kernel objects. Updated every 5 seconds; — means unavailable.";
     assert!(h.query_by_label(tooltip).is_none());
     h.hover_at(label_rect.center());
@@ -1740,6 +1785,15 @@ fn darwin_mach_ports_explanation_is_hover_only() {
     h.hover_at(egui::pos2(20., 20.));
     h.run_steps(40);
     assert!(h.query_by_label(tooltip).is_none());
+    // Independent pointer history: egui intentionally suppresses rapid switches
+    // between tooltips after the preceding tooltip was just dismissed.
+    let mut h = performance_harness(Config::default(), slc_readings, 1.);
+    h.hover_at(slc_rect.center());
+    h.run_steps(40);
+    assert!(h.query_by_label(slc_tip).is_some());
+    h.hover_at(egui::pos2(20., 20.));
+    h.run_steps(40);
+    assert!(h.query_by_label(slc_tip).is_none());
 }
 
 #[test]

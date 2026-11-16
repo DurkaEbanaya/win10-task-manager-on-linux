@@ -80,8 +80,10 @@ pub struct CpuPage {
     has_temperature: bool,
     has_frequency: bool,
     darwin_cpu: bool,
+    apple_silicon: bool,
 
     base_speed: String,
+    frequency_ranges: String,
     sockets: String,
     virt_proc: String,
     virtualization: String,
@@ -143,7 +145,9 @@ impl CpuPage {
             has_temperature: false,
             has_frequency: true,
             darwin_cpu: false,
+            apple_silicon: false,
             base_speed: String::new(),
+            frequency_ranges: String::new(),
             sockets: String::new(),
             virt_proc: String::new(),
             virtualization: String::new(),
@@ -218,6 +222,11 @@ impl CpuPage {
     fn set_static_information(&mut self, readings: &Readings, config: &Config) {
         let cpu = &readings.cpu;
         self.darwin_cpu = cpu.darwin_cpu == Some(true);
+        self.apple_silicon = self.darwin_cpu
+            && cpu
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("Apple M"));
         self.cpu_name = cpu.name.clone().unwrap_or_else(|| i18n("Unknown"));
         self.populate_usage_graphs(cpu.core_usage_percent.len(), config);
 
@@ -262,7 +271,7 @@ impl CpuPage {
         self.l2_cache = cache(cpu.l2_cache_bytes);
         self.l3_cache = cache(cpu.l3_cache_bytes);
         self.slc_cache = mc_core::apple_specs::slc_estimate_bytes(cpu)
-            .map(|bytes| format!("≈{:.0} MiB", bytes as f64 / (1024. * 1024.)));
+            .map(|bytes| format!("{:.0} MiB", bytes as f64 / (1024. * 1024.)));
         if self.darwin_cpu && cpu.l3_cache_bytes.is_none() {
             // A missing sysctl does not prove that no cache exists. Never relabel
             // Apple system-level cache as CPU L3 or insert a catalog capacity.
@@ -339,6 +348,32 @@ impl DevicePage for CpuPage {
     fn update(&mut self, readings: &Readings, env: &UpdateEnv) -> bool {
         let cpu = &readings.cpu;
         self.max_duration = env.max_duration.clone();
+        self.frequency_ranges = cpu
+            .performance_levels
+            .iter()
+            .map(|level| {
+                let name = match level.name.as_deref() {
+                    Some("Efficiency") => "E".into(),
+                    Some("Performance") => "P".into(),
+                    Some("Super") => "S".into(),
+                    Some(name) => name.to_owned(),
+                    None => format!("#{}", level.index),
+                };
+                let range = level
+                    .minimum_frequency_mhz
+                    .zip(level.maximum_frequency_mhz)
+                    .filter(|(min, max)| {
+                        min.is_finite() && max.is_finite() && *min > 0. && max >= min
+                    })
+                    .map(|(min, max)| format!("{:.3}–{:.3} GHz", min / 1000., max / 1000.))
+                    .unwrap_or_else(|| "—".into());
+                format!("{name}: {range}")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        if self.frequency_ranges.is_empty() {
+            self.frequency_ranges = "—".into();
+        }
         self.has_frequency = cpu.frequency_valid != Some(false);
 
         let topology_changed = self.topology != cpu.logical_cpus;
@@ -686,7 +721,11 @@ impl DevicePage for CpuPage {
             third,
         ];
         let mut info = vec![
-            (i18n("Base Speed:"), self.base_speed.clone()),
+            if self.apple_silicon {
+                (i18n("Frequency range:"), self.frequency_ranges.clone())
+            } else {
+                (i18n("Base Speed:"), self.base_speed.clone())
+            },
             (i18n("Sockets:"), self.sockets.clone()),
             (i18n("Virtual processors:"), self.virt_proc.clone()),
             (i18n("Virtualization:"), self.virtualization.clone()),
@@ -751,6 +790,17 @@ impl DevicePage for CpuPage {
             panels,
             stats,
             stat_legends: vec![],
+            independent_stat_rows: if self.darwin_cpu { vec![1] } else { vec![] },
+            info_tooltips: if self.slc_cache.is_some() {
+                vec![(
+                    7,
+                    i18n(
+                        "Published approximate system-level cache capacity for the base Apple M5, not a native measurement or CPU L3 cache.",
+                    ),
+                )]
+            } else {
+                vec![]
+            },
             stat_tooltips: if self.darwin_cpu {
                 vec![(
                     (1, 2),
@@ -829,7 +879,7 @@ impl DevicePage for CpuPage {
 
     {}
 
-    Base speed:         {}
+    {} {}
     Sockets:            {}
     Virtual processors: {}
     Virtualization:     {}
@@ -849,7 +899,16 @@ impl DevicePage for CpuPage {
     Up time:     {}
     Temperature: {}"#,
             self.cpu_name,
-            self.base_speed,
+            if self.apple_silicon {
+                "Frequency range:"
+            } else {
+                "Base speed:        "
+            },
+            if self.apple_silicon {
+                &self.frequency_ranges
+            } else {
+                &self.base_speed
+            },
             self.sockets,
             self.virt_proc,
             self.virtualization,
@@ -934,11 +993,13 @@ mod tests {
         let mut page = CpuPage::new(&readings, &config);
         page.update(&readings, &UpdateEnv::new(&config));
         let view = page.win10_view(&config);
-        assert!(view.info.contains(&("Base Speed:".into(), "—".into())));
-        assert!(view.info.contains(&("SLC:".into(), "≈32 MiB".into())));
+        assert!(view.info.contains(&("Frequency range:".into(), "—".into())));
+        assert!(view.info.contains(&("SLC:".into(), "32 MiB".into())));
+        assert_eq!(view.independent_stat_rows, vec![1]);
+        assert!(view.info_tooltips[0].1.contains("approximate"));
         assert!(!view.info.iter().any(|(key, _)| key == "L3 cache:"));
         let text = page.data_summary();
-        assert!(text.contains("SLC:") && text.contains("≈32 MiB"));
+        assert!(text.contains("SLC:") && text.contains("32 MiB"));
         assert!(!text.contains("L3 cache:"));
         assert_eq!(readings.cpu.l3_cache_bytes, None);
         assert_eq!(readings.cpu.base_freq_khz, None);
@@ -948,6 +1009,46 @@ mod tests {
         let view = other.win10_view(&config);
         assert!(!view.info.iter().any(|(key, _)| key == "SLC:"));
         assert!(view.info.iter().any(|(key, _)| key == "L3 cache:"));
+    }
+
+    #[test]
+    fn darwin_frequency_ranges_use_native_per_type_bounds_not_live_average() {
+        let mut readings = mc_magpie::synthetic_readings(0, 10);
+        readings.cpu.name = Some("Apple M5".into());
+        readings.cpu.darwin_cpu = Some(true);
+        readings.cpu.performance_levels = vec![
+            mc_magpie::magpie_types::cpu::PerformanceLevel {
+                name: Some("Super".into()),
+                minimum_frequency_mhz: Some(1308.),
+                maximum_frequency_mhz: Some(4464.),
+                active_frequency_mhz: Some(2500.),
+                ..Default::default()
+            },
+            mc_magpie::magpie_types::cpu::PerformanceLevel {
+                name: Some("Efficiency".into()),
+                minimum_frequency_mhz: Some(972.),
+                maximum_frequency_mhz: Some(3048.),
+                ..Default::default()
+            },
+        ];
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert_eq!(
+            page.frequency_ranges,
+            "S: 1.308–4.464 GHz; E: 0.972–3.048 GHz"
+        );
+        assert!(
+            !page
+                .win10_view(&config)
+                .info
+                .iter()
+                .any(|(label, _)| label == "Base Speed:")
+        );
+        assert!(!page.data_summary().contains("Base speed:"));
+        readings.cpu.performance_levels[0].maximum_frequency_mhz = Some(f32::NAN);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert!(page.frequency_ranges.starts_with("S: —;"));
     }
 
     #[test]
