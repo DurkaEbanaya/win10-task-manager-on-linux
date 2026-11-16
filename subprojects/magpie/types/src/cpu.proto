@@ -50,6 +50,12 @@ message Cpu {
   repeated LogicalCpu logical_cpus = 24;
   optional float voltage_v = 25;
   optional float bclk_mhz = 26;
+  // Absent retains legacy semantics. False means the required scalar is unavailable.
+  optional bool usage_valid = 27;
+  optional bool frequency_valid = 28;
+  optional bool process_count_valid = 29;
+  optional bool thread_count_valid = 30;
+  optional bool handle_count_valid = 31;
 }
 
 message LogicalCpu {

@@ -197,11 +197,19 @@ impl DiskPage {
             .filter(|s| !s.is_empty())
             .unwrap_or(&disk.id)
             .to_owned();
-        self.title = match self.index {
-            Some(i) => i18n_f("Drive {} ({})", &[&i.to_string(), &disk.id]),
-            None => i18n_f("Drive ({})", &[&disk.id]),
+        self.title = if disk.is_volume == Some(true) {
+            i18n_f("Volume ({})", &[&disk.id])
+        } else {
+            match self.index {
+                Some(i) => i18n_f("Drive {} ({})", &[&i.to_string(), &disk.id]),
+                None => i18n_f("Drive ({})", &[&disk.id]),
+            }
         };
-        let kind = kind_name(disk_kind(disk)).unwrap_or_else(|| i18n("Drive"));
+        let kind = if disk.is_volume == Some(true) {
+            i18n("Volume")
+        } else {
+            kind_name(disk_kind(disk)).unwrap_or_else(|| i18n("Drive"))
+        };
         self.summary.heading = match self.index {
             Some(i) => i18n_f("{} {} ({})", &[&kind, &i.to_string(), &disk.id]),
             None => kind,
@@ -274,11 +282,25 @@ impl DevicePage for DiskPage {
         let h = |v: f32, t: DataType| to_human_readable_nice(v, &t);
 
         self.update_titles(disk);
-        self.usage.add_data_point(vec![vec![disk.busy_percent]]);
-        self.transfer.add_data_point(vec![
-            vec![disk.rx_speed_bytes_ps as f32],
-            vec![disk.tx_speed_bytes_ps as f32],
-        ]);
+        let busy_valid = disk.busy_valid != Some(false);
+        let io_valid = disk.io_valid != Some(false);
+        self.usage.set_data_visible(0, busy_valid);
+        self.summary.graph.set_data_visible(0, busy_valid);
+        for index in 0..2 {
+            self.transfer.set_data_visible(index, io_valid);
+        }
+        if busy_valid {
+            self.usage.add_data_point(vec![vec![disk.busy_percent]]);
+            self.summary
+                .graph
+                .add_data_point(vec![vec![disk.busy_percent]]);
+        }
+        if io_valid {
+            self.transfer.add_data_point(vec![
+                vec![disk.rx_speed_bytes_ps as f32],
+                vec![disk.tx_speed_bytes_ps as f32],
+            ]);
+        }
 
         let l = &mut self.labels;
         l.max_y = h(
@@ -299,11 +321,7 @@ impl DevicePage for DiskPage {
         l.total_read = h(disk.rx_bytes_total as f32, DataType::DriveBytes);
         l.total_write = h(disk.tx_bytes_total as f32, DataType::DriveBytes);
         self.ejectable = disk.ejectable;
-        self.update_partitions(&disk.partitions);
 
-        self.summary
-            .graph
-            .add_data_point(vec![vec![disk.busy_percent]]);
         self.summary.info2 = match disk.temperature_milli_k {
             Some(mk) => format!(
                 "{:.0}% ({:.0} °C)",
@@ -312,6 +330,20 @@ impl DevicePage for DiskPage {
             ),
             None => format!("{:.0}%", disk.busy_percent),
         };
+        if disk.busy_valid == Some(false) {
+            l.active_time = "—".into();
+            self.summary.info2 = "—".into();
+        }
+        if disk.response_time_valid == Some(false) {
+            l.avg_response_time = "—".into();
+        }
+        if disk.io_valid == Some(false) {
+            l.read_speed = "—".into();
+            l.write_speed = "—".into();
+            l.total_read = "—".into();
+            l.total_write = "—".into();
+        }
+        self.update_partitions(&disk.partitions);
         true
     }
 

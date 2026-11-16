@@ -181,8 +181,18 @@ impl DevicePage for NetworkPage {
         self.max_speed = c.max_speed_bytes_ps;
         let h = |v: f32, t: DataType| to_human_readable_nice(v, &t);
 
-        self.graph
-            .add_data_point(vec![vec![c.tx_rate_bytes_ps], vec![c.rx_rate_bytes_ps]]);
+        let rates_valid = c.rates_valid != Some(false);
+        for index in 0..2 {
+            self.graph.set_data_visible(index, rates_valid);
+            self.summary.graph.set_data_visible(index, rates_valid);
+        }
+        if rates_valid {
+            self.graph
+                .add_data_point(vec![vec![c.tx_rate_bytes_ps], vec![c.rx_rate_bytes_ps]]);
+            self.summary
+                .graph
+                .add_data_point(vec![vec![c.tx_rate_bytes_ps], vec![c.rx_rate_bytes_ps]]);
+        }
         let unknown = i18n("Unknown");
         let na = i18n("N/A");
         let wireless = c.wireless_connection.as_ref();
@@ -206,6 +216,10 @@ impl DevicePage for NetworkPage {
         );
         l.speed_send = h(c.tx_rate_bytes_ps, DataType::NetworkBytesPerSecond);
         l.speed_recv = h(c.rx_rate_bytes_ps, DataType::NetworkBytesPerSecond);
+        if c.rates_valid == Some(false) {
+            l.speed_send = "—".into();
+            l.speed_recv = "—".into();
+        }
         l.total_sent = h(c.tx_total_bytes as f32, DataType::NetworkBytes);
         l.total_recv = h(c.rx_total_bytes as f32, DataType::NetworkBytes);
         l.hw_address = c.hw_address.clone();
@@ -213,9 +227,6 @@ impl DevicePage for NetworkPage {
         l.ipv6 = c.ipv6_address.clone().unwrap_or(na);
         l.status = state_label(c.state());
 
-        self.summary
-            .graph
-            .add_data_point(vec![vec![c.tx_rate_bytes_ps], vec![c.rx_rate_bytes_ps]]);
         self.summary.opacity = if c.state() == ConnectionState::Unavailable {
             0.6
         } else {

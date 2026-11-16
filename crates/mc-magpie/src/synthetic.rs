@@ -159,6 +159,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
         rotation_rate: None,
         sector_size: 512,
         partitions,
+        ..Default::default()
     }];
     let _ = SmartInterface::default();
 
@@ -184,6 +185,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
             ipv4_address: Some("192.0.2.10".into()),
             ipv6_address: None,
             state: ConnectionState::Connected as i32,
+            ..Default::default()
         },
     );
     r.network_connections = connections;
@@ -380,6 +382,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
                     network_usage: 0.,
                     gpu_usage: 0.,
                     gpu_memory_usage: 0,
+                    ..Default::default()
                 },
                 ..Default::default()
             },
@@ -435,6 +438,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
                 user: Some("root".into()),
                 group: Some("root".into()),
                 file_path: Some(format!("/usr/lib/systemd/system/{name}")),
+                ..Default::default()
             },
         );
     }
@@ -451,6 +455,7 @@ pub fn synthetic_readings(step: usize, process_count: usize) -> Readings {
             user: Some("user".into()),
             group: Some("user".into()),
             file_path: Some("/usr/lib/systemd/user/pipewire.service".into()),
+            ..Default::default()
         },
     );
 

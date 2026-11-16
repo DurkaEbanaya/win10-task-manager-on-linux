@@ -146,7 +146,8 @@ impl Dialogs {
             Some((id, _)) => *id != info.id,
             None => true,
         };
-        if wants_logs
+        if info.actions_supported
+            && wants_logs
             && !ctx.memory(|m| {
                 m.data
                     .get_temp::<bool>(Id::new(("logs-req", info.id)))
@@ -171,7 +172,7 @@ impl Dialogs {
                     ui.label(RichText::new(i18n("State")).strong());
                     dialog::caption(ui, i18n("The current state of the service"));
                 });
-                if !snap {
+                if !snap && info.actions_supported {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .button("⟲")
@@ -235,15 +236,19 @@ impl Dialogs {
                     ui.end_row();
                     ui.label(i18n("Enabled"));
                     let mut enabled = info.enabled;
-                    ui.add_enabled_ui(!snap, |ui| {
-                        if dialog::switch(ui, &mut enabled).changed() {
-                            cx.send(Command::Magpie(if enabled {
-                                Request::EnableService(info.id)
-                            } else {
-                                Request::DisableService(info.id)
-                            }));
-                        }
-                    });
+                    if !info.actions_supported {
+                        ui.label("—");
+                    } else {
+                        ui.add_enabled_ui(!snap && info.actions_supported, |ui| {
+                            if dialog::switch(ui, &mut enabled).changed() {
+                                cx.send(Command::Magpie(if enabled {
+                                    Request::EnableService(info.id)
+                                } else {
+                                    Request::DisableService(info.id)
+                                }));
+                            }
+                        });
+                    }
                     ui.end_row();
                 });
 
@@ -428,19 +433,45 @@ fn process_details(ctx: &Context, cx: &mut Cx, node: Option<&mc_core::table::Nod
             .spacing([20., 6.])
             .show(ui, |ui| {
                 for (label, value) in [
-                    (i18n("CPU"), format!("{}%", s.cpu_usage.round() as u32)),
+                    (
+                        i18n("CPU"),
+                        if s.cpu_valid == Some(false) {
+                            "—".into()
+                        } else {
+                            format!("{}%", s.cpu_usage.round() as u32)
+                        },
+                    ),
                     (
                         i18n("Memory"),
-                        h(s.memory_usage as f32, DataType::MemoryBytes),
+                        if s.memory_valid == Some(false) {
+                            "—".into()
+                        } else {
+                            h(s.memory_usage as f32, DataType::MemoryBytes)
+                        },
                     ),
-                    (i18n("Swap"), h(s.swap_usage as f32, DataType::MemoryBytes)),
+                    (
+                        i18n("Swap"),
+                        if s.swap_valid == Some(false) {
+                            "—".into()
+                        } else {
+                            h(s.swap_usage as f32, DataType::MemoryBytes)
+                        },
+                    ),
                     (
                         i18n("Drives"),
-                        h(s.disk_usage, DataType::DriveBytesPerSecond),
+                        if s.disk_valid == Some(false) {
+                            "—".into()
+                        } else {
+                            h(s.disk_usage, DataType::DriveBytesPerSecond)
+                        },
                     ),
                     (
                         i18n("Network"),
-                        h(s.network_usage, DataType::NetworkBytesPerSecond),
+                        if s.network_valid == Some(false) {
+                            "—".into()
+                        } else {
+                            h(s.network_usage, DataType::NetworkBytesPerSecond)
+                        },
                     ),
                     (i18n("GPU"), node.gpu.usage.text()),
                     (i18n("GPU engine"), node.gpu.usage.engine_text()),

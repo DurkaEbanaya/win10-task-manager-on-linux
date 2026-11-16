@@ -1,4 +1,4 @@
-name: macOS ARM GUI preview
+name: macOS ARM
 
 on:
   push:
@@ -32,41 +32,36 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: macos-arm-1.96.1-${{ hashFiles('Cargo.lock') }}
+            subprojects/magpie/target
+          key: macos-arm-1.96.1-${{ hashFiles('Cargo.lock', 'subprojects/magpie/Cargo.lock') }}
       - name: Formatting
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          cargo fmt --manifest-path subprojects/magpie/Cargo.toml --all --check
       - name: Clippy
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: |
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo clippy --locked --manifest-path subprojects/magpie/Cargo.toml -p magpie -p magpie-platform-macos --all-targets -- -D warnings
       - name: GUI and platform-independent tests
         run: |
           cargo test --locked -p mc-graph-core -p mc-core -p mc-graph -p mc-ui
           cargo test --locked -p taskmanager-app --no-default-features --features wgpu,production-logging
           cargo test --locked -p mc-magpie sockets::tests
-      - name: Build native GUI preview
-        run: >-
-          cargo build --locked --release -p taskmanager-app
-          --no-default-features --features wgpu,production-logging
-      - name: Reject unavailable live source without starting a daemon
+          cargo test --locked --manifest-path subprojects/magpie/Cargo.toml -p magpie-platform-macos -p magpie-types
+      - name: Build native app bundle
+        run: bash support/macos/build.sh
+      - name: Verify ARM binaries and live telemetry
         shell: bash
         run: |
-          file target/release/taskmanager | tee target/macos-binary.txt
-          rg 'Mach-O 64-bit executable arm64' target/macos-binary.txt
-          check_rejected() {
-            set +e
-            target/release/taskmanager "$@" >target/macos-live-error.txt 2>&1
-            status=$?
-            set -e
-            test "$status" = 2
-            rg 'Live collection is not yet supported on macOS' target/macos-live-error.txt
-          }
-          check_rejected --no-config
-          check_rejected --synthetic 5 --dump-readings 1 target/should-not-exist
-          test ! -e target/should-not-exist
-      - name: Upload unsigned preview binary
+          file target/macos/'Task Manager.app'/Contents/MacOS/*
+          python3 support/macos/verify.py
+      - name: Archive ad-hoc signed bundle
+        run: ditto -c -k --sequesterRsrc --keepParent target/macos/'Task Manager.app' target/macos/taskmanager-macos-arm64.zip
+      - name: Upload experimental app
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: taskmanager-macos-arm64-synthetic-preview
-          path: target/release/taskmanager
+          name: taskmanager-macos-arm64
+          path: target/macos/taskmanager-macos-arm64.zip
           if-no-files-found: error
           retention-days: 14
       - name: Upload actual Metal offscreen renders

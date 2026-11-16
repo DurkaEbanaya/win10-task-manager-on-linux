@@ -526,6 +526,8 @@ fn make_request(
 }
 
 pub struct Client {
+    #[cfg(target_os = "macos")]
+    private_socket_dir: Option<std::path::PathBuf>,
     socket: RefCell<nng_c::Socket>,
 
     socket_addr: Arc<str>,
@@ -538,11 +540,31 @@ pub struct Client {
 impl Drop for Client {
     fn drop(&mut self) {
         self.stop();
+        #[cfg(target_os = "macos")]
+        if let Some(directory) = &self.private_socket_dir {
+            let _ = std::fs::remove_file(directory.join("magpie.ipc"));
+            let _ = std::fs::remove_dir(directory);
+        }
     }
 }
 
 impl Client {
     pub fn new() -> Self {
+        #[cfg(target_os = "macos")]
+        let private_socket_dir = if std::env::var(ENV_MC_DEBUG_MAGPIE_PROCESS_SOCK).is_err() {
+            use std::os::unix::fs::DirBuilderExt;
+            // Short path stays inside sockaddr_un's limit. Atomic creation at
+            // 0700 keeps other users from connecting to process-control IPC.
+            let directory =
+                std::path::PathBuf::from(format!("/tmp/taskmanager-{}", random_string::<24>()));
+            std::fs::DirBuilder::new()
+                .mode(0o700)
+                .create(&directory)
+                .expect("Could not create private daemon socket directory");
+            Some(directory)
+        } else {
+            None
+        };
         let socket_addr =
             if let Ok(mut existing_sock) = std::env::var(ENV_MC_DEBUG_MAGPIE_PROCESS_SOCK) {
                 existing_sock.push('\0');
@@ -554,6 +576,17 @@ impl Client {
                         flatpak_data_dir().display()
                     ))
                 } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        Arc::from(format!(
+                            "ipc://{}/magpie.ipc\0",
+                            private_socket_dir
+                                .as_ref()
+                                .expect("private socket directory")
+                                .display()
+                        ))
+                    }
+                    #[cfg(not(target_os = "macos"))]
                     Arc::from(format!("ipc:///tmp/magpie_{}.ipc\0", random_string::<8>()))
                 }
             };
@@ -561,6 +594,8 @@ impl Client {
         let socket = nng_c::Socket::req0().expect("Could not create initial socket");
 
         Self {
+            #[cfg(target_os = "macos")]
+            private_socket_dir,
             socket: RefCell::new(socket),
 
             socket_addr,
@@ -649,6 +684,7 @@ impl Client {
                     }
                 }
                 let _ = child.kill();
+                let _ = child.wait();
             })
         }
 

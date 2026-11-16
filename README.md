@@ -150,11 +150,13 @@ separate `cargo +1.96.1 xtask diagnostic` build (see [perf/README.md](perf/READM
 Release builds with custom `--no-default-features` must select `production-logging`, unless
 they explicitly select the mutually exclusive `diagnostic-profile` mode.
 
-### Building - macOS Apple Silicon (experimental GUI preview)
+### Building - macOS Apple Silicon (experimental native port)
 
-The macOS port currently supports **synthetic demo data and recorded fixtures only**,
-not live macOS telemetry. CPU/GPU names and statistics in synthetic mode are demo
-values, not measurements of your Mac. Linux remains the supported live backend.
+The development branch includes a native, unprivileged macOS magpie backend:
+CPU load, Darwin memory accounting, readable processes and process termination,
+mounted volumes, physical disk throughput, interface counters, Apple GPU activity,
+battery charge and a read-only launchd inventory. It is experimental, not telemetry
+parity with Linux. Missing or denied measurements are shown as unavailable.
 
 Install Apple Command Line Tools, Rust 1.96.1 and CMake, then clone this development
 branch with submodules (Cargo metadata still requires the Linux backend's submodule):
@@ -163,18 +165,28 @@ branch with submodules (Cargo metadata still requires the Linux backend's submod
 git clone --recurse-submodules --branch feat/macos-arm \
   https://github.com/DurkaEbanaya/win10-task-manager-on-linux.git
 cd win10-task-manager-on-linux
-cargo +1.96.1 build --locked -p taskmanager-app \
-  --no-default-features --features wgpu,production-logging
-cargo +1.96.1 run --locked -p taskmanager-app \
-  --no-default-features --features wgpu,production-logging -- \
-  --synthetic 300 --no-config
+bash support/macos/build.sh
+open 'target/macos/Task Manager.app'
+# Or run without changing saved preferences:
+'target/macos/Task Manager.app/Contents/MacOS/taskmanager' --no-config
 ```
 
 Run from Terminal in a logged-in graphical session. macOS defaults to wgpu (Metal)
-when available; Linux retains its OpenGL default. `--no-config` keeps this preview
-from changing saved preferences. No root privileges or Linux magpie daemon are needed.
-There is no signed `.app`/`.dmg` or live macOS collector yet. Port scope and follow-up
-milestones are tracked in [the macOS port plan](docs/goals/2026-11-16-macos-arm.md).
+when available; Linux retains its OpenGL default. No root privileges, password prompt,
+background login service or Linux daemon are needed. The matching macOS daemon lives
+inside the bundle and exits with the GUI. The bundle is ad-hoc signed, **not** Developer
+ID signed/notarized; downloaded artifacts may require explicit approval in macOS
+Privacy & Security. Do not disable Gatekeeper globally.
+
+CPU frequency/temperature/power, per-process network/swap/GPU telemetry, GPU memory
+residency, disk busy time/latency and launchd control/logs are not implemented. Process
+visibility is limited by macOS permissions/SIP; totals are not presented as complete
+when some processes cannot be inspected. APFS volumes share container capacity and
+must not be summed as separate physical disks. No private sensor user-client or
+privileged `powermetrics` integration is installed.
+
+`--synthetic 300` remains a demo, not measurements of your Mac. Details and measured
+verification are tracked in [the macOS port plan](docs/goals/2026-11-16-macos-arm.md).
 
 ### Always on top
 

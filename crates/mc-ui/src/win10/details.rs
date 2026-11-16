@@ -68,6 +68,8 @@ struct Entry {
     user: String,
     cpu: f32,
     memory: u64,
+    cpu_valid: bool,
+    memory_valid: bool,
     gpu: mc_core::gpu::GpuStats,
     icon: RowIcon,
 }
@@ -139,6 +141,8 @@ impl DetailsPage {
                     .unwrap_or_else(|| i18n("N/A")),
                 cpu: p.usage_stats.cpu_usage,
                 memory: p.usage_stats.memory_usage,
+                cpu_valid: p.usage_stats.cpu_valid != Some(false),
+                memory_valid: p.usage_stats.memory_valid != Some(false),
                 gpu: gpu.processes.get(&p.pid).cloned().unwrap_or_default(),
                 icon: app_of
                     .get(&p.pid)
@@ -152,13 +156,15 @@ impl DetailsPage {
         let column = self.list.sort_column;
         self.entries.sort_by(|a, b| {
             let known = |e: &Entry| match column {
+                4 => e.cpu_valid,
+                5 => e.memory_valid,
                 6 => e.gpu.usage.percent.is_some(),
                 7 => e.gpu.usage.engine.is_some(),
                 8 => e.gpu.dedicated.is_some(),
                 9 => e.gpu.shared.is_some(),
                 _ => true,
             };
-            if column >= 6 && known(a) != known(b) {
+            if column >= 4 && known(a) != known(b) {
                 return known(b).cmp(&known(a));
             }
             let ordering = match column {
@@ -205,8 +211,16 @@ impl DetailsPage {
                     e.pid.to_string(),
                     e.status.clone(),
                     e.user.clone(),
-                    format!("{:02}", e.cpu.round() as u32),
-                    kib(e.memory),
+                    if e.cpu_valid {
+                        format!("{:02}", e.cpu.round() as u32)
+                    } else {
+                        "—".into()
+                    },
+                    if e.memory_valid {
+                        kib(e.memory)
+                    } else {
+                        "—".into()
+                    },
                     e.gpu.usage.text(),
                     e.gpu.usage.engine_text(),
                     e.gpu.dedicated.map_or_else(|| "—".into(), kib),

@@ -37,6 +37,7 @@ const WIDTHS: [f32; 5] = [180., 49., 581., 99., 99.];
 const IDS: [&str; 5] = ["name", "pid", "description", "status", "group"];
 
 struct Entry {
+    actions_supported: bool,
     key: String,
     id: u64,
     name: String,
@@ -95,6 +96,7 @@ impl ServicesView {
                     i18n("Disabled")
                 };
                 Some(Entry {
+                    actions_supported: info.actions_supported,
                     key: n.key.clone(),
                     id: info.id,
                     name: n.name.clone(),
@@ -189,16 +191,16 @@ impl ServicesView {
                 self.menu = None;
                 return;
             };
-            let (id, running) = (entry.id, entry.running);
+            let (id, running, supported) = (entry.id, entry.running, entry.actions_supported);
             let mut open = true;
             menu::context(ui, Id::new("services-menu"), pos, &mut open, |ui| {
-                if menu::item(ui, &i18n("Start"), "", !running) {
+                if menu::item(ui, &i18n("Start"), "", supported && !running) {
                     cx.send(Command::Magpie(Request::StartService(id)));
                 }
-                if menu::item(ui, &i18n("Stop"), "", running) {
+                if menu::item(ui, &i18n("Stop"), "", supported && running) {
                     cx.send(Command::Magpie(Request::StopService(id)));
                 }
-                if menu::item(ui, &i18n("Restart"), "", running) {
+                if menu::item(ui, &i18n("Restart"), "", supported && running) {
                     cx.send(Command::Magpie(Request::RestartService(id)));
                 }
                 menu::separator(ui);

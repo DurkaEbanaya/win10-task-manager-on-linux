@@ -78,6 +78,7 @@ pub struct CpuPage {
     is_bogomips: bool,
     has_power: bool,
     has_temperature: bool,
+    has_frequency: bool,
 
     base_speed: String,
     sockets: String,
@@ -138,6 +139,7 @@ impl CpuPage {
             is_bogomips: false,
             has_power: false,
             has_temperature: false,
+            has_frequency: true,
             base_speed: String::new(),
             sockets: String::new(),
             virt_proc: String::new(),
@@ -258,12 +260,19 @@ impl CpuPage {
     /// The bottom graph selection, falling back when the data is unavailable.
     fn bottom_selection(&self, config: &Config) -> i32 {
         let n = config.performance_page_cpu_graph_bottom;
-        if n == GRAPH_POWER && !self.has_power {
+        let selected = if n == GRAPH_POWER && !self.has_power {
             GRAPH_TEMPERATURE
         } else if n == GRAPH_TEMPERATURE && !self.has_temperature {
             GRAPH_CLOCK
         } else {
             n
+        };
+        if (selected == GRAPH_CLOCK && !self.has_frequency)
+            || (selected == GRAPH_TEMPERATURE && !self.has_temperature)
+        {
+            GRAPH_NONE
+        } else {
+            selected
         }
     }
 
@@ -314,27 +323,46 @@ impl DevicePage for CpuPage {
     fn update(&mut self, readings: &Readings, env: &UpdateEnv) -> bool {
         let cpu = &readings.cpu;
         self.max_duration = env.max_duration.clone();
+        self.has_frequency = cpu.frequency_valid != Some(false);
 
         let topology_changed = self.topology != cpu.logical_cpus;
         if self.per_core.len() != cpu.core_usage_percent.len() || topology_changed {
             self.set_static_information(readings, env.config);
         }
 
-        self.overall.add_data_point(vec![
-            vec![cpu.total_usage_percent],
-            vec![cpu.kernel_usage_percent],
-        ]);
-        self.thread_wise
-            .add_data_point(vec![cpu.core_usage_percent.clone()]);
-        for (i, g) in self.per_core.iter_mut().enumerate() {
-            let usage = cpu.core_usage_percent.get(i).copied().unwrap_or_default();
-            let kernel = cpu
-                .core_kernel_usage_percent
-                .get(i)
-                .copied()
-                .unwrap_or_default();
-            g.add_data_point(vec![vec![usage], vec![kernel]]);
+        if cpu.usage_valid != Some(false) {
+            self.overall.add_data_point(vec![
+                vec![cpu.total_usage_percent],
+                vec![cpu.kernel_usage_percent],
+            ]);
+            self.thread_wise
+                .add_data_point(vec![cpu.core_usage_percent.clone()]);
+            for (i, g) in self.per_core.iter_mut().enumerate() {
+                let usage = cpu.core_usage_percent.get(i).copied().unwrap_or_default();
+                let kernel = cpu
+                    .core_kernel_usage_percent
+                    .get(i)
+                    .copied()
+                    .unwrap_or_default();
+                g.add_data_point(vec![vec![usage], vec![kernel]]);
+            }
+            self.summary
+                .graph
+                .add_data_point(vec![vec![cpu.total_usage_percent]]);
         }
+        self.overall
+            .set_data_visible(0, cpu.usage_valid != Some(false));
+        let usage_valid = cpu.usage_valid != Some(false);
+        let kernel_visible = usage_valid && env.config.performance_page_kernel_times;
+        self.overall.set_data_visible(1, kernel_visible);
+        self.thread_wise.set_data_visible(0, usage_valid);
+        for graph in &mut self.per_core {
+            graph.set_data_visible(0, usage_valid);
+            graph.set_data_visible(1, kernel_visible);
+        }
+        self.summary
+            .graph
+            .set_data_visible(0, cpu.usage_valid != Some(false));
 
         let l = &mut self.labels;
         l.hardware.clear();
@@ -435,8 +463,14 @@ impl DevicePage for CpuPage {
         if topology_changed {
             self.topology.clone_from(&cpu.logical_cpus);
         }
-        l.utilization = format!("{}%", cpu.total_usage_percent.round());
-        let freq_text = if self.is_bogomips {
+        l.utilization = if cpu.usage_valid == Some(false) {
+            "—".into()
+        } else {
+            format!("{}%", cpu.total_usage_percent.round())
+        };
+        let freq_text = if cpu.frequency_valid == Some(false) {
+            "—".into()
+        } else if self.is_bogomips {
             self.bottom
                 .add_single_data_point(CLOCK_DATASET, vec![cpu.current_frequency_mhz as f32]);
             format!("{:.2} BogoMIPS", cpu.current_frequency_mhz as f32)
@@ -450,9 +484,16 @@ impl DevicePage for CpuPage {
             self.bottom.add_single_data_point(POWER_DATASET, vec![w]);
             to_human_readable_nice(w, &DataType::Watts)
         });
-        l.processes = cpu.total_process_count.to_string();
-        l.threads = cpu.total_thread_count.to_string();
-        l.handles = cpu.total_handle_count.to_string();
+        let count = |value: u64, valid: Option<bool>| {
+            if valid == Some(false) {
+                "—".into()
+            } else {
+                value.to_string()
+            }
+        };
+        l.processes = count(cpu.total_process_count, cpu.process_count_valid);
+        l.threads = count(cpu.total_thread_count, cpu.thread_count_valid);
+        l.handles = count(cpu.total_handle_count, cpu.handle_count_valid);
         l.uptime = to_uptime(cpu.uptime_seconds);
         l.cpufreq_driver = cpu.frequency_driver.clone();
         l.cpufreq_governor = cpu.frequency_governor.clone();
@@ -466,11 +507,8 @@ impl DevicePage for CpuPage {
         self.has_temperature |= cpu.temperature_celsius.is_some();
 
         // Sidebar
-        self.summary
-            .graph
-            .add_data_point(vec![vec![cpu.total_usage_percent]]);
         // Win10 list: "percent speed" on one line
-        let mut info1 = format!("{}% {freq_text}", cpu.total_usage_percent.round());
+        let mut info1 = format!("{} {freq_text}", l.utilization);
         if let Some(t) = cpu.temperature_celsius {
             info1.push_str(&format!(" ({t:.0} °C)"));
         }
@@ -729,6 +767,26 @@ mod tests {
         assert!(s.contains("    Virtual processors: 4\n"));
         assert_eq!(page.summary.info1, "Test CPU");
         assert!(page.summary.info2.starts_with("42% "));
+    }
+
+    #[test]
+    fn native_unavailable_frequency_has_no_fabricated_clock_graph() {
+        let mut readings = mc_magpie::synthetic_readings(0, 0);
+        readings.cpu.frequency_valid = Some(false);
+        readings.cpu.usage_valid = Some(false);
+        readings.cpu.thread_count_valid = Some(false);
+        readings.cpu.handle_count_valid = Some(false);
+        readings.cpu.power_draw_w = None;
+        readings.cpu.temperature_celsius = None;
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert_eq!(page.labels.speed, "—");
+        assert_eq!(page.labels.utilization, "—");
+        assert_eq!(page.labels.threads, "—");
+        assert_eq!(page.labels.handles, "—");
+        assert!(!page.summary.info2.contains("0%"));
+        assert_eq!(page.win10_view(&config).panels.len(), 1);
     }
 
     #[test]

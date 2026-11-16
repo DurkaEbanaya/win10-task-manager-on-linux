@@ -209,6 +209,12 @@ impl ProcessesPage {
     }
 
     fn heat_percent(table: &TableView, column: Column, node: &Node) -> Option<f32> {
+        if matches!(
+            column,
+            Column::Cpu | Column::Memory | Column::Swap | Column::Drive | Column::Network
+        ) {
+            column.numeric_value(node)?;
+        }
         let s = &node.stats;
         let share = |v: f64, total: u64| {
             if total == 0 {
@@ -237,6 +243,9 @@ impl ProcessesPage {
         let t = &table.totals;
         let pct = |v: f32| (Some(format!("{}%", v.round() as u32)), v >= 90.);
         match column {
+            Column::Cpu if !t.cpu_valid => (Some("—".into()), false),
+            Column::Memory if !t.memory_valid => (Some("—".into()), false),
+            Column::Drive if !t.drive_valid => (Some("—".into()), false),
             Column::Cpu => pct(t.cpu_percent),
             Column::Memory => pct(t.memory_percent),
             Column::Swap => pct(t.swap_percent),

@@ -7,6 +7,14 @@ The Mission Center Developers copyright headers and About attribution are retain
 
 ## Mission Center sources
 
+The macOS platform adapter is a local implementation of public Darwin Mach/libproc,
+sysctl and IOKit registry APIs, retaining Mission Center's platform contracts and
+GPL notices. It depends on `sysinfo` 0.37.2 (MIT), `mach2` 0.7 (MIT/Apache-2.0),
+`core-foundation` 0.10 (MIT/Apache-2.0) and `libc` (MIT/Apache-2.0), resolved in
+Cargo.lock. No third-party sensor implementation or Apple binary is copied into
+the source tree. IOKit property names/units were verified read-only on the development
+Mac; they are driver-dependent data, not a stable promise of availability.
+
 The original root manifest at
 [`671bc544ac4f7a3149c53db6df8a453252547d0a`](https://github.com/0FL01/win10-task-manager-on-linux/blob/671bc544ac4f7a3149c53db6df8a453252547d0a/Cargo.toml)
 lists these authors:

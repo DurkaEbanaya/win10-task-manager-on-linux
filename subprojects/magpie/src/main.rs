@@ -53,6 +53,8 @@ use magpie_platform::DataCache;
 
 #[cfg(target_os = "linux")]
 use magpie_platform_linux as magpie_platform_os;
+#[cfg(target_os = "macos")]
+use magpie_platform_macos as magpie_platform_os;
 
 use magpie_platform_os::DataCacheTypes;
 

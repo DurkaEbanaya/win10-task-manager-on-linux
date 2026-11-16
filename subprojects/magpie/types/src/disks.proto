@@ -65,6 +65,11 @@ message Disk {
   required uint64 sector_size = 19;
 
   map<string, PartitionInfo> partitions = 20;
+  optional bool io_valid = 21;
+  optional bool busy_valid = 22;
+  optional bool response_time_valid = 23;
+  // Mount capacity is not the physical size of an APFS storage device.
+  optional bool is_volume = 24;
 }
 
 message PartitionInfo {

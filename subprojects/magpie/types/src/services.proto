@@ -35,6 +35,9 @@ message Service {
   optional string user = 8;
   optional string group = 9;
   optional string file_path = 10;
+  // False for read-only inventories (for example launchd). Legacy absent = supported.
+  optional bool actions_supported = 11;
+  optional bool enabled_valid = 12;
 }
 
 message RequestServiceList {}

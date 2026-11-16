@@ -65,6 +65,7 @@ pub enum ServiceIcon {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ServiceInfo {
+    pub actions_supported: bool,
     pub id: u64,
     pub running: bool,
     pub enabled: bool,
@@ -192,11 +193,14 @@ impl Column {
     pub fn numeric_value(&self, node: &Node) -> Option<f64> {
         let s = &node.stats;
         Some(match self {
-            Column::Cpu => s.cpu_usage as f64,
-            Column::Memory => s.memory_usage as f64,
-            Column::Swap => s.swap_usage as f64,
-            Column::Drive => s.disk_usage as f64,
-            Column::Network => s.network_usage as f64,
+            Column::Cpu if s.cpu_valid != Some(false) => s.cpu_usage as f64,
+            Column::Memory if s.memory_valid != Some(false) => s.memory_usage as f64,
+            Column::Swap if s.swap_valid != Some(false) => s.swap_usage as f64,
+            Column::Drive if s.disk_valid != Some(false) => s.disk_usage as f64,
+            Column::Network if s.network_valid != Some(false) => s.network_usage as f64,
+            Column::Cpu | Column::Memory | Column::Swap | Column::Drive | Column::Network => {
+                return None;
+            }
             Column::Gpu => node.gpu.usage.percent? as f64,
             Column::GpuMemory => node.gpu.memory? as f64,
             Column::GpuDedicatedMemory => node.gpu.dedicated? as f64,
@@ -237,12 +241,18 @@ impl Column {
         }
     }
 
-    fn gpu_known(&self, node: &Node) -> Option<bool> {
+    fn value_known(&self, node: &Node) -> Option<bool> {
         match self {
             Self::GpuEngine => Some(node.gpu.usage.engine.is_some()),
-            Self::Gpu | Self::GpuMemory | Self::GpuDedicatedMemory | Self::GpuSharedMemory => {
-                Some(self.numeric_value(node).is_some())
-            }
+            Self::Cpu
+            | Self::Memory
+            | Self::Swap
+            | Self::Drive
+            | Self::Network
+            | Self::Gpu
+            | Self::GpuMemory
+            | Self::GpuDedicatedMemory
+            | Self::GpuSharedMemory => Some(self.numeric_value(node).is_some()),
             _ => None,
         }
     }
@@ -580,6 +590,7 @@ impl Tree {
                 let mut node =
                     Node::new(key.clone(), RowKind::Service, section, service.name.clone());
                 let info = ServiceInfo {
+                    actions_supported: service.actions_supported != Some(false),
                     id: service.id,
                     running: service.running,
                     enabled: service.enabled,
@@ -690,7 +701,7 @@ impl Tree {
             let (lhs, rhs) = (&self.nodes[a], &self.nodes[b]);
             if lhs.section == rhs.section
                 && lhs.kind == rhs.kind
-                && let (Some(l), Some(r)) = (column.gpu_known(lhs), column.gpu_known(rhs))
+                && let (Some(l), Some(r)) = (column.value_known(lhs), column.value_known(rhs))
                 && l != r
             {
                 return r.cmp(&l); // Unknown stays last in either direction.
@@ -791,6 +802,9 @@ pub fn toggle_expanded(expanded: &mut HashSet<String>, node: &Node) {
 /// Totals shown under the column titles, as in the GTK `update_column_titles`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ColumnTotals {
+    pub cpu_valid: bool,
+    pub memory_valid: bool,
+    pub drive_valid: bool,
     pub cpu_percent: f32,
     pub memory_percent: f32,
     pub drive_percent: f32,
@@ -882,6 +896,13 @@ impl ColumnTotals {
             .map(|value| value as f32);
 
         Self {
+            cpu_valid: readings.cpu.usage_valid != Some(false),
+            memory_valid: mem.sample_valid != Some(false),
+            drive_valid: readings
+                .disks_info
+                .iter()
+                .filter(|disk| disk.capacity_bytes > 0)
+                .all(|disk| disk.busy_valid != Some(false)),
             cpu_percent: readings.cpu.total_usage_percent,
             memory_percent: memory_used as f32 * 100. / mem_total as f32,
             drive_percent,
@@ -1207,6 +1228,32 @@ mod tests {
         assert_eq!(order[1], Column::Name);
         assert_eq!(order.len(), Column::ALL.len());
         assert_eq!(parse_column_order(&serialize_column_order(&order)), order);
+    }
+
+    #[test]
+    fn unavailable_native_metrics_do_not_masquerade_as_zero() {
+        let mut node = Node::new("test".into(), RowKind::Process, 0, "test".into());
+        assert_eq!(Column::Cpu.numeric_value(&node), Some(0.));
+        node.stats.cpu_valid = Some(false);
+        node.stats.disk_valid = Some(false);
+        assert_eq!(Column::Cpu.numeric_value(&node), None);
+        assert_eq!(Column::Drive.numeric_value(&node), None);
+        assert_eq!(Column::Memory.numeric_value(&node), Some(0.));
+        let mut readings = Readings::new();
+        readings.cpu.usage_valid = Some(false);
+        readings.mem_info.sample_valid = Some(false);
+        readings
+            .disks_info
+            .push(mc_magpie::magpie_types::disks::Disk {
+                capacity_bytes: 1,
+                busy_valid: Some(false),
+                ..Default::default()
+            });
+        let totals = ColumnTotals::from_readings(
+            &readings,
+            &GpuSnapshot::from_readings(&readings, &mut Default::default(), 1000),
+        );
+        assert!(!totals.cpu_valid && !totals.memory_valid && !totals.drive_valid);
     }
 
     #[test]

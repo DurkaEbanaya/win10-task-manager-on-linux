@@ -199,6 +199,8 @@ impl OpenRC {
                 result.insert(
                     service_id,
                     Service {
+                        actions_supported: None,
+                        enabled_valid: None,
                         id: service_id,
                         name: service_name.to_string(),
                         description: if description.is_empty() {
@@ -286,6 +288,8 @@ impl OpenRC {
                 };
                 let state: State = unsafe { std::mem::transmute(state & 0xFF) };
                 result.entry(service_id).or_insert_with(|| Service {
+                    actions_supported: None,
+                    enabled_valid: None,
                     id: service_id,
                     name: service_name.to_string(),
                     description: if description.is_empty() {

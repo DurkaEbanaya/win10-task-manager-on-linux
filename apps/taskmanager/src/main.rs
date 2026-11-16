@@ -125,6 +125,19 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> Args {
 }
 
 fn locale_dir() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    if std::env::var_os("MC_LOCALEDIR").is_none()
+        && let Some(resources) = std::env::current_exe()
+            .ok()
+            .and_then(|path| {
+                path.parent()?
+                    .parent()
+                    .map(|path| path.join("Resources/locale"))
+            })
+            .filter(|path| path.is_dir())
+    {
+        return resources;
+    }
     std::env::var_os("MC_LOCALEDIR")
         .map(PathBuf::from)
         .or_else(|| option_env!("MC_LOCALEDIR").map(PathBuf::from))
@@ -310,14 +323,6 @@ fn main() -> eframe::Result {
     let _profile_reporter = mc_magpie::profile::Reporter::start();
     let startup = mc_magpie::profile::Span::new(mc_magpie::profile::Phase::Startup);
     let args = parse_args();
-
-    #[cfg(target_os = "macos")]
-    if args.dump.is_some() || (args.synthetic.is_none() && args.fixture.is_none()) {
-        eprintln!(
-            "Live collection is not yet supported on macOS. Use --synthetic 300 or --fixture DIR."
-        );
-        std::process::exit(2);
-    }
 
     if let Some((n, dir)) = args.dump {
         dump_readings(n, dir);

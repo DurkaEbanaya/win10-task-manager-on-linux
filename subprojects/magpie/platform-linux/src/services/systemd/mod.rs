@@ -428,6 +428,8 @@ impl SystemD {
                 let active_state: ActiveState = active_state.as_str().into();
 
                 let new_service = Service {
+                    actions_supported: None,
+                    enabled_valid: None,
                     id,
                     name,
                     description: if description.is_empty() {

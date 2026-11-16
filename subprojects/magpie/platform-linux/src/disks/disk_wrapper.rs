@@ -809,6 +809,7 @@ impl DiskWrapper {
             sector_size: 512,
 
             partitions: Default::default(),
+            ..Default::default()
         }
     }
 

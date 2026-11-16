@@ -31,6 +31,48 @@ impl ProcessUsageStats {
         self.network_usage += other.network_usage;
         self.gpu_usage += other.gpu_usage;
         self.gpu_memory_usage += other.gpu_memory_usage;
+        // Legacy None means available; a group is unavailable if any member is.
+        for (valid, other) in [
+            (&mut self.cpu_valid, other.cpu_valid),
+            (&mut self.memory_valid, other.memory_valid),
+            (&mut self.swap_valid, other.swap_valid),
+            (&mut self.disk_valid, other.disk_valid),
+            (&mut self.network_valid, other.network_valid),
+        ] {
+            if *valid == Some(false) || other == Some(false) {
+                *valid = Some(false);
+            } else if other == Some(true) {
+                *valid = Some(true);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unavailable_member_invalidates_group_without_changing_legacy_samples() {
+        let mut aggregate = ProcessUsageStats::default();
+        aggregate.merge(&ProcessUsageStats {
+            cpu_usage: 2.,
+            ..Default::default()
+        });
+        assert_eq!(aggregate.cpu_usage, 2.);
+        assert_eq!(aggregate.cpu_valid, None);
+        aggregate.merge(&ProcessUsageStats {
+            cpu_usage: 3.,
+            cpu_valid: Some(false),
+            memory_valid: Some(true),
+            ..Default::default()
+        });
+        assert_eq!(aggregate.cpu_valid, Some(false));
+        assert_eq!(aggregate.memory_valid, Some(true));
+        aggregate.merge(&ProcessUsageStats {
+            cpu_valid: Some(true),
+            ..Default::default()
+        });
+        assert_eq!(aggregate.cpu_valid, Some(false));
     }
 }
 

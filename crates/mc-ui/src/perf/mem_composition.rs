@@ -38,7 +38,7 @@ pub struct MemComposition {
 impl MemComposition {
     pub fn update(&mut self, mem: &Memory) {
         self.total = mem.mem_total;
-        if self.total == 0 {
+        if self.total == 0 || mem.sample_valid == Some(false) {
             self.bytes = [0; 5];
             self.tooltips = std::array::from_fn(|_| {
                 i18n(n_(
@@ -64,6 +64,14 @@ impl MemComposition {
                 to_human_readable_nice(v as f32, &DataType::MemoryBytes)
             }
         });
+        if mem.darwin_accounting == Some(true) {
+            let overview = i18n_f(
+                "Darwin physical memory\n\nOther: {}\nFile-backed cache: {}\nFree: {}\n\nOther includes wired and compressed pages. The cache is external_page_count; free is free_count. Inactive and purgeable pages contribute to the separate available-memory estimate, not additional sections of this bar.",
+                &[&values[0], &values[1], &values[4]],
+            );
+            self.tooltips = std::array::from_fn(|_| overview.clone());
+            return;
+        }
         let overview = i18n_f(
             n_("Other: {}\nCache: {}\nShared: {}\nBuff: {}\nFree: {}"),
             &[&values[0], &values[1], &values[2], &values[3], &values[4]],

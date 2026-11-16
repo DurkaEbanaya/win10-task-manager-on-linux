@@ -63,6 +63,7 @@ pub struct MemoryPage {
     max_graph_ram: String,
     total_swap: String,
     has_swap: bool,
+    darwin_accounting: bool,
     speed: String,
     slots_used: String,
     form_factor: String,
@@ -171,6 +172,7 @@ impl MemoryPage {
             labels: Labels::default(),
             max_duration: super::max_duration(config),
             slots: super::mem_slots::MemorySlots::new(readings),
+            darwin_accounting: mem.darwin_accounting == Some(true),
         }
     }
 }
@@ -285,7 +287,16 @@ impl DevicePage for MemoryPage {
     fn update(&mut self, readings: &Readings, env: &UpdateEnv) -> bool {
         self.slots.update(readings);
         let mem = &readings.mem_info;
+        self.darwin_accounting = mem.darwin_accounting == Some(true);
         self.max_duration = env.max_duration.clone();
+        if mem.sample_valid == Some(false) {
+            self.labels.in_use = "—".into();
+            self.labels.available = "—".into();
+            self.labels.committed = "—".into();
+            self.labels.cached = "—".into();
+            self.summary.info2 = "—".into();
+            return true;
+        }
         let h = |v: u64| to_human_readable_nice(v as f32, &DataType::MemoryBytes);
 
         let accounting = mc_core::memory::MemoryUsage::from_memory(mem);
@@ -407,7 +418,11 @@ impl DevicePage for MemoryPage {
         l.in_use = h(used);
         l.free = h(accounting.free);
         l.available = h(accounting.available);
-        l.committed = h(mem.committed);
+        l.committed = if mem.darwin_accounting == Some(true) {
+            "—".into()
+        } else {
+            h(mem.committed)
+        };
         l.cached = h(accounting.cache);
         let installed = readings
             .mem_devices
@@ -458,12 +473,29 @@ impl DevicePage for MemoryPage {
             l.swap_used = None;
             l.swap_free = None;
         }
-        l.usage_tooltip = i18n_f(
-            n_(
-                "In use ({})\n\nMemTotal minus MemAvailable. MemAvailable estimates memory available without swapping, including reclaimable cache and buffers. If MemAvailable exceeds MemTotal, MemFree is used instead. Cached is shown separately and must not be added to In use.",
-            ),
-            &[&l.in_use],
-        );
+        l.usage_tooltip = if mem.darwin_accounting == Some(true) {
+            i18n_f(
+                "In use ({})\n\nPhysical memory minus the Darwin estimate of available memory (free, inactive and purgeable pages). This is not Activity Monitor's Memory Used or memory pressure. Cached, wired and compressed memory overlap this accounting and must not be added to In use.",
+                &[&l.in_use],
+            )
+        } else {
+            i18n_f(
+                n_(
+                    "In use ({})\n\nMemTotal minus MemAvailable. MemAvailable estimates memory available without swapping, including reclaimable cache and buffers. If MemAvailable exceeds MemTotal, MemFree is used instead. Cached is shown separately and must not be added to In use.",
+                ),
+                &[&l.in_use],
+            )
+        };
+        if mem.darwin_accounting == Some(true) {
+            for (label, value) in [
+                ("Wired:", mem.wired_bytes),
+                ("Compressed:", mem.compressed_bytes),
+            ] {
+                if let Some(value) = value {
+                    l.hardware.push((i18n(label), h(value)));
+                }
+            }
+        }
         self.total_swap = h(mem.swap_total);
 
         // Sidebar
@@ -505,7 +537,9 @@ impl DevicePage for MemoryPage {
             .clone_from(&self.labels.unprivileged_hardware);
     }
     fn extra_ui(&mut self, ui: &mut Ui, rect: egui::Rect, module_height: f32, cx: &mut Cx) {
-        self.slots.ui(ui, rect, module_height, cx);
+        if !self.darwin_accounting {
+            self.slots.ui(ui, rect, module_height, cx);
+        }
     }
 
     fn win10_view(&mut self, config: &Config) -> PageView<'_> {
@@ -526,6 +560,9 @@ impl DevicePage for MemoryPage {
             (i18n("Form factor:"), self.form_factor.clone()),
             (i18n("Type:"), self.ram_type.clone()),
         ];
+        if self.darwin_accounting {
+            info.clear();
+        }
         if self.devices_failed {
             info.push((
                 i18n("Getting additional memory information failed"),

@@ -243,6 +243,17 @@ impl TableView {
         if node.kind == RowKind::SectionHeader {
             return String::new();
         }
+        let valid = match column {
+            Column::Cpu => s.cpu_valid,
+            Column::Memory => s.memory_valid,
+            Column::Swap => s.swap_valid,
+            Column::Drive => s.disk_valid,
+            Column::Network => s.network_valid,
+            _ => None,
+        };
+        if valid == Some(false) {
+            return "—".into();
+        }
         match column {
             Column::Name => node.name.clone(),
             Column::Pid => match node.kind {

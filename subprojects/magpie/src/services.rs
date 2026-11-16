@@ -32,6 +32,26 @@ use magpie_platform::services::{
 use crate::{data_cache, nng};
 
 pub fn handle_request(kind: Option<ServicesRequestKind>) -> nng::Buffer {
+    #[cfg(target_os = "macos")]
+    if !matches!(
+        &kind,
+        Some(ServicesRequestKind::UserServiceList(_) | ServicesRequestKind::SystemServiceList(_))
+            | None
+    ) {
+        // No pretend success for unsupported launchd control/log operations.
+        let response = Response {
+            body: Some(ResponseBody::Services(ServicesResponse {
+                response: Some(ServiceResponseKind::Error(ServicesResponseError {
+                    error: Some(ServicesResponseErrorKind::PermissionDenied(
+                        Default::default(),
+                    )),
+                })),
+            })),
+        };
+        let mut buffer = nng::Buffer::new(response.encoded_len());
+        response.encode_raw(&mut buffer);
+        return buffer;
+    }
     let start = Instant::now();
 
     let cache = data_cache();

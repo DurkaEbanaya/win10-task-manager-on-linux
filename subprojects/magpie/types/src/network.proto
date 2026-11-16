@@ -73,6 +73,7 @@ message Connection {
   optional string ipv6_address = 12;
 
   required ConnectionState state = 13;
+  optional bool rates_valid = 14;
 }
 
 message ConnectionsRequest {}

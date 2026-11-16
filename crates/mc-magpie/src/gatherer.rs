@@ -618,6 +618,7 @@ fn gather_from_magpie(ctx: ThreadCtx) {
     // Memory devices do not change while running, read them only once
     let mem_devices = magpie.memory_devices();
     let mut known_icons = HashSet::<String>::new();
+    #[cfg(target_os = "linux")]
     let mut users = crate::users::UserResolver::default();
     let mut sockets = crate::sockets::SocketTraffic::default();
     let mut hardware_sample: Option<crate::hardware_worker::Sample> = None;
@@ -641,10 +642,22 @@ fn gather_from_magpie(ctx: ThreadCtx) {
 
         if !reduced {
             readings.running_processes = timed!("Process", Processes, magpie.processes());
-            readings.process_users = timed!(
-                "Process users",
-                Users,
-                users.resolve(&readings.running_processes)
+            #[cfg(target_os = "linux")]
+            {
+                readings.process_users = timed!(
+                    "Process users",
+                    Users,
+                    users.resolve(&readings.running_processes)
+                );
+            }
+            // Native collectors can resolve directory-service users without /proc.
+            readings.process_users.extend(
+                readings
+                    .running_processes
+                    .iter()
+                    .filter_map(|(&pid, process)| {
+                        process.user_name.clone().map(|name| (pid, name))
+                    }),
             );
             // Per-process network traffic from TCP socket counters, no privileges needed
             readings.network_unavailable = !timed!(

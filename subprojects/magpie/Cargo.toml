@@ -12,6 +12,7 @@ edition = "2021"
 members = [
     "platform",
     "platform-linux",
+    "platform-macos",
     "types",
 ]
 
@@ -36,6 +37,9 @@ path = "platform"
 
 [target.'cfg(target_os = "linux")'.dependencies.magpie-platform-linux]
 path = "platform-linux"
+
+[target.'cfg(target_os = "macos")'.dependencies.magpie-platform-macos]
+path = "platform-macos"
 
 [dependencies.nng-c-sys]
 version = "1.11"
