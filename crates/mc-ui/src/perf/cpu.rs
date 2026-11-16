@@ -79,6 +79,7 @@ pub struct CpuPage {
     has_power: bool,
     has_temperature: bool,
     has_frequency: bool,
+    darwin_cpu: bool,
 
     base_speed: String,
     sockets: String,
@@ -140,6 +141,7 @@ impl CpuPage {
             has_power: false,
             has_temperature: false,
             has_frequency: true,
+            darwin_cpu: false,
             base_speed: String::new(),
             sockets: String::new(),
             virt_proc: String::new(),
@@ -213,6 +215,7 @@ impl CpuPage {
 
     fn set_static_information(&mut self, readings: &Readings, config: &Config) {
         let cpu = &readings.cpu;
+        self.darwin_cpu = cpu.darwin_cpu == Some(true);
         self.cpu_name = cpu.name.clone().unwrap_or_else(|| i18n("Unknown"));
         self.populate_usage_graphs(cpu.core_usage_percent.len(), config);
 
@@ -229,13 +232,17 @@ impl CpuPage {
                     to_human_readable_nice(hz, &DataType::Hertz)
                 }
             }
+            None if self.darwin_cpu => i18n("Not reported by macOS"),
             None => i18n("Unknown"),
         };
 
-        self.virtualization = cpu
-            .virtualization_technology
-            .clone()
-            .unwrap_or_else(|| i18n("Unsupported"));
+        self.virtualization = cpu.virtualization_technology.clone().unwrap_or_else(|| {
+            i18n(if self.darwin_cpu {
+                "Unknown"
+            } else {
+                "Unsupported"
+            })
+        });
         self.virt_machine = match cpu.is_virtual_machine {
             Some(true) => i18n("Yes"),
             Some(false) => i18n("No"),
@@ -252,6 +259,11 @@ impl CpuPage {
         self.l1_cache = cache(cpu.l1_combined_cache_bytes);
         self.l2_cache = cache(cpu.l2_cache_bytes);
         self.l3_cache = cache(cpu.l3_cache_bytes);
+        if self.darwin_cpu && cpu.l3_cache_bytes.is_none() {
+            // A missing sysctl does not prove that no cache exists. Never relabel
+            // Apple system-level cache as CPU L3 or insert a catalog capacity.
+            self.l3_cache = i18n("Not reported by macOS");
+        }
 
         self.has_power = cpu.power_draw_w.is_some();
         self.has_temperature = cpu.temperature_celsius.is_some();
@@ -367,6 +379,23 @@ impl DevicePage for CpuPage {
         let l = &mut self.labels;
         l.hardware.clear();
         l.unprivileged_hardware.clear();
+        if self.darwin_cpu && !cpu.performance_levels.is_empty() {
+            let row = (
+                i18n("Speed order:"),
+                cpu.performance_levels
+                    .iter()
+                    .map(|level| {
+                        level
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("#{}", level.index))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" / "),
+            );
+            l.hardware.push(row.clone());
+            l.unprivileged_hardware.push(row);
+        }
         if let Some(bclk) = cpu.bclk_mhz {
             l.unprivileged_hardware
                 .push((i18n("BCLK:"), format!("{bclk:.2} MHz")));
@@ -515,7 +544,24 @@ impl DevicePage for CpuPage {
         } else {
             format!("{}%", cpu.total_usage_percent.round())
         };
-        let freq_text = if cpu.frequency_valid == Some(false) {
+        let freq_text = if self.darwin_cpu {
+            let clocks: Vec<_> = cpu
+                .performance_levels
+                .iter()
+                .map(|level| {
+                    level
+                        .active_frequency_mhz
+                        .filter(|mhz| mhz.is_finite() && *mhz > 0.)
+                        .map(|mhz| format!("{:.2}", mhz / 1000.))
+                        .unwrap_or_else(|| "—".into())
+                })
+                .collect();
+            if clocks.is_empty() || clocks.iter().all(|clock| clock == "—") {
+                "—".into()
+            } else {
+                format!("{} GHz", clocks.join(" / "))
+            }
+        } else if cpu.frequency_valid == Some(false) {
             "—".into()
         } else if self.is_bogomips {
             self.bottom
@@ -541,6 +587,12 @@ impl DevicePage for CpuPage {
         l.processes = count(cpu.total_process_count, cpu.process_count_valid);
         l.threads = count(cpu.total_thread_count, cpu.thread_count_valid);
         l.handles = count(cpu.total_handle_count, cpu.handle_count_valid);
+        if self.darwin_cpu {
+            l.handles = cpu
+                .darwin_open_file_count
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "—".into());
+        }
         l.uptime = to_uptime(cpu.uptime_seconds);
         l.cpufreq_driver = cpu.frequency_driver.clone();
         l.cpufreq_governor = cpu.frequency_governor.clone();
@@ -603,12 +655,26 @@ impl DevicePage for CpuPage {
         let stats = vec![
             vec![
                 (i18n("Utilization"), l.utilization.clone()),
-                (i18n("Speed"), l.speed.clone()),
+                (
+                    i18n(if self.darwin_cpu {
+                        "Speed (active avg.)"
+                    } else {
+                        "Speed"
+                    }),
+                    l.speed.clone(),
+                ),
             ],
             vec![
                 (i18n("Processes"), l.processes.clone()),
                 (i18n("Threads"), l.threads.clone()),
-                (i18n("Handles"), l.handles.clone()),
+                (
+                    i18n(if self.darwin_cpu {
+                        "Open files"
+                    } else {
+                        "Handles"
+                    }),
+                    l.handles.clone(),
+                ),
             ],
             third,
         ];
@@ -711,7 +777,7 @@ impl DevicePage for CpuPage {
                 for (label, value, enabled) in [
                     (n_("_Power Draw"), GRAPH_POWER, self.has_power),
                     (n_("_Temperature"), GRAPH_TEMPERATURE, self.has_temperature),
-                    (n_("_Clock Speed"), GRAPH_CLOCK, true),
+                    (n_("_Clock Speed"), GRAPH_CLOCK, self.has_frequency),
                     (n_("_None"), GRAPH_NONE, true),
                 ] {
                     if enabled && menu::radio(ui, &strip_mnemonic(&i18n(label)), current == value) {
@@ -786,6 +852,52 @@ impl DevicePage for CpuPage {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn darwin_cpu_uses_native_semantics_without_fabricated_handles_or_base_clock() {
+        let mut readings = mc_magpie::synthetic_series(1, 1).remove(0);
+        let cpu = &mut readings.cpu;
+        cpu.darwin_cpu = Some(true);
+        cpu.base_freq_khz = None;
+        cpu.l3_cache_bytes = None;
+        cpu.socket_count = Some(1);
+        cpu.is_virtual_machine = Some(false);
+        cpu.virtualization_technology = Some("Supported (Hypervisor.framework)".into());
+        cpu.frequency_valid = Some(false);
+        cpu.thread_count_valid = Some(true);
+        cpu.total_thread_count = 3341;
+        cpu.handle_count_valid = Some(false);
+        cpu.darwin_open_file_count = Some(6507);
+        cpu.performance_levels = vec![mc_magpie::magpie_types::cpu::PerformanceLevel {
+            name: Some("Super".into()),
+            active_frequency_mhz: Some(3593.),
+            ..Default::default()
+        }];
+        let config = Config::default();
+        let mut page = CpuPage::new(&readings, &config);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert_eq!(page.labels.speed, "3.59 GHz");
+        assert_eq!(page.labels.threads, "3341");
+        assert_eq!(page.base_speed, "Not reported by macOS");
+        assert_eq!(page.l3_cache, "Not reported by macOS");
+        assert_eq!(page.sockets, "1");
+        assert_eq!(page.virt_machine, "No");
+        let view = page.win10_view(&config);
+        assert!(view.stats[1].contains(&("Open files".into(), "6507".into())));
+        assert!(!view.stats[1].iter().any(|(label, _)| label == "Handles"));
+        assert!(
+            view.stats[0]
+                .iter()
+                .any(|(label, _)| label == "Speed (active avg.)")
+        );
+        readings.cpu.performance_levels[0].active_frequency_mhz = None;
+        readings.cpu.darwin_open_file_count = None;
+        readings.cpu.thread_count_valid = Some(false);
+        page.update(&readings, &UpdateEnv::new(&config));
+        assert_eq!(page.labels.speed, "—");
+        assert_eq!(page.labels.handles, "—");
+        assert_eq!(page.labels.threads, "—");
+    }
+
     use super::*;
 
     #[test]

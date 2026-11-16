@@ -25,6 +25,11 @@ with tempfile.TemporaryDirectory(prefix="macos-smoke-", dir=private) as director
     assert 0 <= data["cpu"]["total_usage_percent"] <= 100
     assert data["cpu"]["core_usage_percent"]
     assert data["cpu"]["physical_core_count"] > 0
+    assert data["cpu"].get("darwin_cpu") is True
+    assert data["cpu"]["thread_count_valid"] is True
+    assert data["cpu"]["total_thread_count"] > 0
+    assert data["cpu"]["darwin_open_file_count"] > 0
+    assert data["cpu"]["socket_count"] > 0
     for level in data["cpu"]["performance_levels"]:
         assert level["physical_core_count"] > 0
         assert 0 <= level["index"] < 16

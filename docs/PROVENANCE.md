@@ -119,6 +119,13 @@ app. macmon is not a runtime dependency. No closed-source TMOG code or assets ar
 included: only its public feature description was reviewed. Undocumented APIs and
 driver-specific keys are optional and fail closed when absent or inconsistent.
 
+The CPU thread counter follows the public Mach SDK `processor_set_load_info`
+layout and the `processor_set_default`/`processor_set_statistics` API. XNU's
+`osfmk/kern/processor.c` was read to confirm that the default-set load information
+returns global task/thread counts, not a permission-filtered list of task ports.
+Only API/layout facts were used, not XNU implementation code. Darwin's
+`kern.num_files` is labeled Open files, not Windows Handles or Mach IPC rights.
+
 ## Silver: original historical notice
 
 The removed `rust-gui-silver-bullet/` experiment served as a reference during the GUI port.

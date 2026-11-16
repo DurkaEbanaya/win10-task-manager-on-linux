@@ -59,6 +59,10 @@ message Cpu {
   optional uint32 physical_core_count = 32;
   // Aggregate kernel-reported groups, not a mapping of Mach CPU array ordinals.
   repeated PerformanceLevel performance_levels = 33;
+  // Platform semantics for the CPU view; absent retains legacy/Linux labels.
+  optional bool darwin_cpu = 34;
+  // kern.num_files: system-wide open file objects, NOT Windows handles or FDs summed over PIDs.
+  optional uint64 darwin_open_file_count = 35;
 }
 
 message PerformanceLevel {

@@ -156,6 +156,46 @@ fn sysctl_size(name: &CStr) -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
+// Public Mach interface. The default processor-set name port suffices: no task
+// ports, privileged host port or per-process/SIP access is needed.
+unsafe extern "C" {
+    fn processor_set_default(host: u32, set: *mut u32) -> i32;
+    fn processor_set_statistics(set: u32, flavor: i32, info: *mut u32, count: *mut u32) -> i32;
+}
+
+fn system_thread_count() -> Option<u64> {
+    let mut set = 0;
+    let mut info = [0_u32; 4];
+    let mut count = info.len() as u32;
+    // SAFETY: the SDK's load-info flavor writes four natural_t words into info;
+    // every acquired send right is released, including the statistics error path.
+    unsafe {
+        let host = mach_host_self();
+        let result = processor_set_default(host, &mut set);
+        mach_port_deallocate(mach_task_self(), host);
+        if result != libc::KERN_SUCCESS {
+            return None;
+        }
+        let result = processor_set_statistics(
+            set,
+            libc::PROCESSOR_SET_LOAD_INFO,
+            info.as_mut_ptr(),
+            &mut count,
+        );
+        mach_port_deallocate(mach_task_self(), set);
+        // processor_set_load_info: task_count, thread_count, load_average, mach_factor.
+        (result == libc::KERN_SUCCESS && count == info.len() as u32).then_some(u64::from(info[1]))
+    }
+}
+
+fn sysctl_bool(name: &CStr) -> Option<bool> {
+    match sysctl::<u32>(name) {
+        Some(0) => Some(false),
+        Some(1) => Some(true),
+        _ => None,
+    }
+}
+
 pub struct CpuCollector {
     data: Cpu,
     previous: Vec<[u32; 4]>,
@@ -168,12 +208,23 @@ impl CpuCache for CpuCollector {
         Self {
             data: Cpu {
                 name,
+                darwin_cpu: Some(true),
+                socket_count: sysctl::<u32>(c"hw.packages").filter(|count| *count > 0),
+                virtualization_technology: sysctl_bool(c"kern.hv_support").map(|supported| {
+                    if supported {
+                        "Supported (Hypervisor.framework)"
+                    } else {
+                        "Unsupported"
+                    }
+                    .into()
+                }),
+                is_virtual_machine: sysctl_bool(c"kern.hv_vmm_present"),
                 base_freq_khz: sysctl::<u64>(c"hw.cpufrequency").map(|v| v / 1000),
                 l1_combined_cache_bytes: sysctl::<u64>(c"hw.l1icachesize")
                     .zip(sysctl::<u64>(c"hw.l1dcachesize"))
                     .map(|(a, b)| a + b),
                 l2_cache_bytes: sysctl(c"hw.l2cachesize"),
-                l3_cache_bytes: sysctl(c"hw.l3cachesize"),
+                l3_cache_bytes: sysctl_size(c"hw.l3cachesize"),
                 frequency_valid: Some(false),
                 usage_valid: Some(false),
                 process_count_valid: Some(false),
@@ -251,26 +302,18 @@ impl CpuCache for CpuCollector {
             }
         }
         self.data.uptime_seconds = sysinfo::System::uptime();
+        let threads = system_thread_count();
+        self.data.total_thread_count = threads.unwrap_or_default();
+        self.data.thread_count_valid = Some(threads.is_some());
+        self.data.darwin_open_file_count = sysctl::<u32>(c"kern.num_files").map(u64::from);
         if let Some(pids) = pids() {
             self.data.total_process_count = pids.len() as u64;
             self.data.process_count_valid = Some(true);
-            let mut threads = 0u64;
-            let mut complete_threads = true;
-            for pid in pids {
-                if let Some(info) = pid_info::<libc::proc_taskinfo>(pid, libc::PROC_PIDTASKINFO) {
-                    threads += info.pti_threadnum.max(0) as u64;
-                } else {
-                    complete_threads = false;
-                }
-            }
-            self.data.total_thread_count = threads;
-            self.data.thread_count_valid = Some(complete_threads);
             // File descriptors are not Windows handles or Mach port rights.
             // Keep the UI's Handles field unknown, even with a complete fd scan.
             self.data.handle_count_valid = Some(false);
         } else {
             self.data.process_count_valid = Some(false);
-            self.data.thread_count_valid = Some(false);
             self.data.handle_count_valid = Some(false);
         }
     }
@@ -1088,6 +1131,7 @@ mod tests {
         assert!((0. ..=100.).contains(&cpu.cached().total_usage_percent));
         assert_eq!(cpu.cached().frequency_valid, Some(false));
         assert!(cpu.cached().physical_core_count.is_some_and(|v| v > 0));
+        assert_eq!(cpu.cached().darwin_cpu, Some(true));
         for group in &cpu.cached().performance_levels {
             assert!(group.physical_core_count > 0);
             assert!(group.index < 16);
@@ -1110,6 +1154,13 @@ mod tests {
         assert_eq!(own.usage_stats.memory_valid, Some(true));
         assert!(own.usage_stats.memory_usage > 0);
         assert_eq!(own.usage_stats.network_valid, Some(false));
+    }
+
+    #[test]
+    fn public_system_thread_statistics_do_not_require_process_access() {
+        assert!(system_thread_count().is_some_and(|count| count > 0));
+        assert!(sysctl::<u32>(c"kern.num_files").is_some_and(|count| count > 0));
+        assert!(sysctl::<u32>(c"hw.packages").is_some_and(|count| count > 0));
     }
 
     #[test]
